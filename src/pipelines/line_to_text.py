@@ -10,11 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_pipeline(config: Dict[str, Any]) -> Dict[str, float]:
-    """Run the line-to-text pipeline for Tesseract baseline.
-    
-    Args:
-        config: Configuration dictionary from YAML file
-        
+    """
     Returns:
         Dictionary containing final metrics: {"final_cer": float, "final_wer": float}
     """
@@ -29,7 +25,7 @@ def run_pipeline(config: Dict[str, Any]) -> Dict[str, float]:
     logger.info(f"Loading data from: {data_path}")
     
     try:
-        samples = load_iam_lines(data_path)
+        samples = load_iam_lines()
     except Exception as e:
         logger.error(f"Failed to load data: {e}")
         raise

@@ -13,20 +13,23 @@ def load_iam_lines(data_path: str = None) -> List[Tuple[str, str]]:
         # Load IAM from Hugging Face
         dataset = load_dataset("Teklia/IAM-line", "default")
         
-        # Get the first 
-        first_sample = dataset['validation'][0]
+        # Create temporary directory 
+        temp_dir = tempfile.mkdtemp() # create tempo directory
         
-        # Extract image and text
-        image = first_sample['image']
-        text = first_sample['text']
+        samples = []
+        validation_data = dataset['validation'] #take a separate split 
         
-        # Save image temporily and return path
-        temp_dir = tempfile.mkdtemp()
-        image_path = os.path.join(temp_dir, "sample.png")
-        image.save(image_path)
+        # Process all samples in the validation set
+        for i, sample in enumerate(validation_data): # loop creating an index for each sample
+            image = sample['image']
+            text = sample['text']
+            
+            # Save image temporarily and return path
+            image_path = os.path.join(temp_dir, f"sample_{i}.png") 
+            image.save(image_path) # save image in the tempo dir 
+            
+            samples.append((image_path, text))
         
-        samples = [(image_path, text)]
-        logger.info(f"Loaded sample: {text}")
         logger.info(f"Loaded {len(samples)} sample(s) from IAM dataset")
         
         return samples

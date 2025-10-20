@@ -2,10 +2,10 @@ problem_type: Transcription
 experiment_name: HTR - Baselines
 run_name: tesseract_iam_line_test
 granularity: line
-dataset: IAM
+dataset: Teklia/IAM-line
 model: Tesseract
 pipeline: line_to_text
-data_path: data/iam
+data_path: Teklia/IAM-line
 fine_tuning:
   enabled: false
 params:

@@ -5,10 +5,19 @@ import logging
 import sys
 import os
 
-from data_loaders.line_loader import load_iam_lines
-from pipelines.line_to_text import run_pipeline
-from utils.git_utils import get_current_git_commit
-from utils.metrics import calculate_cer, calculate_wer
+"""Ensure the project root is on sys.path so that 'from src.*' imports work
+when running this file directly (e.g., `python src/experiments/run_experiment.py`).
+This adds the parent directory of `src/` to sys.path.
+"""
+THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(THIS_DIR, "..", ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from src.data_loaders.line_loader import load_iam_lines
+from src.pipelines.line_to_text import run_pipeline
+from src.utils.git_utils import get_current_git_commit
+from src.utils.metrics import calculate_cer, calculate_wer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

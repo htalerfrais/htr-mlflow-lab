@@ -10,3 +10,7 @@ dependencies:
       - torch
       - torchvision
       - pyyaml
+      - pytesseract
+      - datasets
+      - python-Levenshtein
+      - pillow

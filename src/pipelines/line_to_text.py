@@ -2,9 +2,9 @@
 import logging
 from typing import Dict, Any
 
-from src.data_loaders.line_loader import load_iam_lines
-from src.utils.tesseract_executor import run_tesseract_ocr
-from src.utils.metrics import calculate_cer, calculate_wer
+from data_loaders.line_loader import load_iam_lines
+from utils.tesseract_executor import run_tesseract_ocr
+from utils.metrics import calculate_cer, calculate_wer
 
 logger = logging.getLogger(__name__)
 

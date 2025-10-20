@@ -4,13 +4,11 @@ import mlflow
 import logging
 import sys
 import os
-from pathlib import Path
 
-# Add src to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
-
-from src.pipelines.line_to_text import run_pipeline
-from src.utils.git_utils import get_current_git_commit
+from data_loaders.line_loader import load_iam_lines
+from pipelines.line_to_text import run_pipeline
+from utils.git_utils import get_current_git_commit
+from utils.metrics import calculate_cer, calculate_wer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,14 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 def load_config(config_path: str) -> dict:
-    """Load configuration from YAML file.
-    
-    Args:
-        config_path: Path to the YAML configuration file
-        
-    Returns:
-        Configuration dictionary
-    """
     try:
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
@@ -37,19 +27,15 @@ def load_config(config_path: str) -> dict:
 
 
 def run_experiment(config_path: str):
-    """Run a complete experiment based on configuration file.
-    
-    Args:
-        config_path: Path to the YAML configuration file
-    """
-    # Load configuration
+    # first we load the configs
     config = load_config(config_path)
     
-    # Set MLflow tracking URI to remote server
+    # set the mlflow tracking uri to the remote server we created
     mlflow.set_tracking_uri("http://13.60.230.97:5000/")
     logger.info("Connected to MLflow tracking server")
     
-    # Get or create experiment
+    # instantiate experiment (get or create)
+    # if the experiùent already exists, we get the already ewisting id 
     experiment_name = config.get("experiment_name", "Default Experiment")
     try:
         experiment = mlflow.get_experiment_by_name(experiment_name)
@@ -63,20 +49,24 @@ def run_experiment(config_path: str):
         logger.error(f"Failed to setup experiment: {e}")
         raise
     
+
+    # ---------------------------------
     # Start MLflow run
+    # ---------------------------------
+
     run_name = config.get("run_name", "unnamed_run")
     
     with mlflow.start_run(experiment_id=experiment_id, run_name=run_name):
         try:
             # Log git commit
             try:
-                git_commit = get_current_git_commit()
+                git_commit = get_current_git_commit() # from the utils functions
                 mlflow.log_param("git_commit", git_commit)
             except Exception as e:
                 logger.warning(f"Could not get git commit: {e}")
                 mlflow.log_param("git_commit", "unknown")
             
-            # Log all configuration parameters
+            # log all configuration parameters from the dict key and subkeys
             for key, value in config.items():
                 if isinstance(value, dict):
                     for sub_key, sub_value in value.items():
@@ -86,7 +76,7 @@ def run_experiment(config_path: str):
             
             logger.info("Logged configuration parameters to MLflow")
             
-            # Run the pipeline based on configuration
+            # run the pipeline based on configuration
             pipeline_name = config.get("pipeline", "line_to_text")
             
             if pipeline_name == "line_to_text":
@@ -94,7 +84,7 @@ def run_experiment(config_path: str):
             else:
                 raise ValueError(f"Unknown pipeline: {pipeline_name}")
             
-            # Log metrics
+            # Log metrics (metrics is returned by run_pipeline from pipeline/)
             for metric_name, metric_value in metrics.items():
                 mlflow.log_metric(metric_name, metric_value)
             

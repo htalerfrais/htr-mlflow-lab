@@ -9,6 +9,7 @@ import os
 when running this file directly (e.g., `python src/experiments/run_experiment.py`).
 This adds the parent directory of `src/` to sys.path.
 """
+
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(THIS_DIR, "..", ".."))
 if PROJECT_ROOT not in sys.path:
@@ -93,9 +94,16 @@ def run_experiment(config_path: str):
             else:
                 raise ValueError(f"Unknown pipeline: {pipeline_name}")
             
-            # Log metrics (metrics is returned by run_pipeline from pipeline/)
+            # Log metrics and dataset info
             for metric_name, metric_value in metrics.items():
-                mlflow.log_metric(metric_name, metric_value)
+                if metric_name == "dataset_info":
+                    # Log dataset information as parameters
+                    dataset_info = metric_value
+                    for key, value in dataset_info.items():
+                        mlflow.log_param(f"dataset.{key}", value)
+                else:
+                    # Log regular metrics
+                    mlflow.log_metric(metric_name, metric_value)
             
             logger.info(f"Experiment completed successfully. Metrics: {metrics}")
             

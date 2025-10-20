@@ -8,7 +8,7 @@ from datasets import load_dataset
 logger = logging.getLogger(__name__)
 
 
-def load_iam_lines(data_path: str = None) -> List[Tuple[str, str]]:
+def load_iam_lines(data_path: str = None) -> tuple[List[Tuple[str, str]], dict]:
     try:
         # Load IAM from Hugging Face
         dataset = load_dataset("Teklia/IAM-line", "default")
@@ -32,7 +32,15 @@ def load_iam_lines(data_path: str = None) -> List[Tuple[str, str]]:
         
         logger.info(f"Loaded {len(samples)} sample(s) from IAM dataset")
         
-        return samples
+        # Create dataset metadata for MLflow logging
+        dataset_info = {
+            "dataset_name": "Teklia/IAM-line",
+            "dataset_split": "validation",
+            "num_samples": len(samples),
+            "dataset_version": "default"
+        }
+        
+        return samples, dataset_info
         
     except Exception as e:
         raise Exception(f"Failed to load IAM dataset: {e}")

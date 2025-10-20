@@ -20,12 +20,10 @@ def run_pipeline(config: Dict[str, Any]) -> Dict[str, float]:
     if config.get("model") != "Tesseract":
         raise ValueError(f"Pipeline only supports Tesseract model, got: {config.get('model')}")
     
-    # Load test data
-    data_path = config.get("data_path", "data/iam")
-    logger.info(f"Loading data from: {data_path}")
+    # Load test data from huggingface dataset using dataloader
     
     try:
-        samples = load_iam_lines()
+        samples, dataset_info = load_iam_lines()
     except Exception as e:
         logger.error(f"Failed to load data: {e}")
         raise
@@ -72,5 +70,6 @@ def run_pipeline(config: Dict[str, Any]) -> Dict[str, float]:
     
     return {
         "final_cer": final_cer,
-        "final_wer": final_wer
+        "final_wer": final_wer,
+        "dataset_info": dataset_info
     }

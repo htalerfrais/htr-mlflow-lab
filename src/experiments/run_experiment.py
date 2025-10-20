@@ -97,6 +97,7 @@ def run_experiment(config_path: str):
             raise
 
 
+# entrypoint , with args config_file
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python run_experiment.py <config_file>")

@@ -1,75 +1,74 @@
-# src/pipelines/line_to_text.py
+"""Line-to-text pipeline implementation."""
+
 import logging
 from typing import Dict, Any
 
-from src.data_loaders.line_loader import load_iam_lines
-from src.utils.tesseract_executor import run_tesseract_ocr
+from src.data_loaders.base import DataLoader
+from src.models.base import OCRModel
+from src.pipelines.base import Pipeline
 from src.utils.metrics import calculate_cer, calculate_wer
+
 
 logger = logging.getLogger(__name__)
 
 
-def run_pipeline(config: Dict[str, Any]) -> Dict[str, float]:
-    """
-    Returns:
-        Dictionary containing final metrics: {"final_cer": float, "final_wer": float}
-    """
-    logger.info("Starting line-to-text pipeline")
-    
-    # Check if this is a Tesseract experiment
-    if config.get("model") != "Tesseract":
-        raise ValueError(f"Pipeline only supports Tesseract model, got: {config.get('model')}")
-    
-    # Load test data from huggingface dataset using dataloader
-    
-    try:
-        samples, dataset_info = load_iam_lines()
-    except Exception as e:
-        logger.error(f"Failed to load data: {e}")
-        raise
-    
-    # Get Tesseract parameters
-    tesseract_params = config.get("params", {})
-    lang = tesseract_params.get("tesseract_language", "eng")
-    engine_mode = tesseract_params.get("tesseract_engine_mode", 3)
-    
-    logger.info(f"Tesseract config: lang={lang}, engine_mode={engine_mode}")
-    
-    # Process each sample
-    total_cer = 0.0
-    total_wer = 0.0
-    num_samples = len(samples)
-    
-    for i, (image_path, ground_truth) in enumerate(samples):
-        logger.info(f"Processing sample {i+1}/{num_samples}: {image_path}")
-        
+class LineToTextPipeline(Pipeline):
+    """Run OCR on line-level images and compute accuracy metrics."""
+
+    def __init__(self, data_loader: DataLoader, model: OCRModel) -> None:
+        self._data_loader = data_loader
+        self._model = model
+
+    def get_name(self) -> str:
+        return "line_to_text"
+
+    def run(self) -> Dict[str, Any]:
+        logger.info("Starting line-to-text pipeline with model %s", self._model.get_name())
+
         try:
-            # Run Tesseract OCR
-            prediction = run_tesseract_ocr(image_path, lang, engine_mode)
-            
-            # Calculate metrics
-            cer = calculate_cer(ground_truth, prediction)
-            wer = calculate_wer(ground_truth, prediction)
-            
-            total_cer += cer
-            total_wer += wer
-            
-            logger.info(f"Sample {i+1} - CER: {cer:.4f}, WER: {wer:.4f}")
-            logger.info(f"Ground truth: '{ground_truth}'")
-            logger.info(f"Prediction: '{prediction}'")
-            
-        except Exception as e:
-            logger.error(f"Failed to process sample {i+1}: {e}")
+            samples, dataset_info = self._data_loader.load_data()
+        except Exception as exc:
+            logger.error("Failed to load data: %s", exc)
             raise
-    
-    # Calculate final metrics
-    final_cer = total_cer / num_samples
-    final_wer = total_wer / num_samples
-    
-    logger.info(f"Pipeline completed - Final CER: {final_cer:.4f}, Final WER: {final_wer:.4f}")
-    
-    return {
-        "final_cer": final_cer,
-        "final_wer": final_wer,
-        "dataset_info": dataset_info
-    }
+
+        num_samples = len(samples)
+        if num_samples == 0:
+            raise ValueError("No samples available for pipeline execution")
+
+        total_cer = 0.0
+        total_wer = 0.0
+
+        for index, (image_path, ground_truth) in enumerate(samples, start=1):
+            logger.info("Processing sample %s/%s: %s", index, num_samples, image_path)
+
+            try:
+                prediction = self._model.predict(image_path)
+
+                cer = calculate_cer(ground_truth, prediction)
+                wer = calculate_wer(ground_truth, prediction)
+
+                total_cer += cer
+                total_wer += wer
+
+                logger.info("Sample %s - CER: %.4f, WER: %.4f", index, cer, wer)
+                logger.info("Ground truth: '%s'", ground_truth)
+                logger.info("Prediction: '%s'", prediction)
+
+            except Exception as exc:
+                logger.error("Failed to process sample %s: %s", index, exc)
+                raise
+
+        final_cer = total_cer / num_samples
+        final_wer = total_wer / num_samples
+
+        logger.info(
+            "Pipeline completed - Final CER: %.4f, Final WER: %.4f",
+            final_cer,
+            final_wer,
+        )
+
+        return {
+            "final_cer": final_cer,
+            "final_wer": final_wer,
+            "dataset_info": dataset_info,
+        }

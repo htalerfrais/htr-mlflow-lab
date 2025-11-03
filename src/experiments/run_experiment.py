@@ -5,20 +5,14 @@ import logging
 import sys
 import os
 
-"""Ensure the project root is on sys.path so that 'from src.*' imports work
-when running this file directly (e.g., `python src/experiments/run_experiment.py`).
-This adds the parent directory of `src/` to sys.path.
-"""
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(THIS_DIR, "..", ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from src.data_loaders.line_loader import load_iam_lines
-from src.pipelines.line_to_text import run_pipeline
 from src.utils.git_utils import get_current_git_commit
-from src.utils.metrics import calculate_cer, calculate_wer
+from src.pipelines.factory import PipelineFactory
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,27 +32,31 @@ def load_config(config_path: str) -> dict:
 
 def run_experiment(config_path: str):
     # first we load the configs
-    config = load_config(config_path)
+    config = load_config(config_path) # makes a dict of the config file 
     
     # set the mlflow tracking uri to the remote server we created
     mlflow.set_tracking_uri("http://13.60.230.97:5000/")
     logger.info("Connected to MLflow tracking server")
     
-    # instantiate experiment (get or create)
-    # if the experiùent already exists, we get the already ewisting id 
-    experiment_name = config.get("experiment_name", "Default Experiment")
+    # ---------------------------------
+    # Instantiate MLflow experiment (get or create)
+    # ---------------------------------
+
+    # if the experiment already exists, we get the already existing id 
+    experiment_name = config.get("experiment_name", "Default Experiment") # get exp name from config file of codebase
     try:
-        experiment = mlflow.get_experiment_by_name(experiment_name)
+        experiment = mlflow.get_experiment_by_name(experiment_name) # gets the exp object from mlflow by the name of exp in config local file 
         if experiment is None:
-            experiment_id = mlflow.create_experiment(experiment_name)
+            experiment_id = mlflow.create_experiment(experiment_name) 
             logger.info(f"Created new experiment: {experiment_name}")
         else:
-            experiment_id = experiment.experiment_id
+            experiment_id = experiment.experiment_id # gets the id of the experiment from the mlflow object
             logger.info(f"Using existing experiment: {experiment_name}")
     except Exception as e:
         logger.error(f"Failed to setup experiment: {e}")
         raise
     
+    # we now have the experiment_id and the experiment_name of the mlflow experiment corresponding to the config file 
 
     # ---------------------------------
     # Start MLflow run
@@ -68,6 +66,7 @@ def run_experiment(config_path: str):
     
     with mlflow.start_run(experiment_id=experiment_id, run_name=run_name):
         try:
+            # ---------- login the config of the run into mlflow ------------
             # Log git commit
             try:
                 git_commit = get_current_git_commit() # from the utils functions
@@ -77,28 +76,30 @@ def run_experiment(config_path: str):
                 mlflow.log_param("git_commit", "unknown")
             
             # log all configuration parameters from the dict key and subkeys
-            for key, value in config.items():
-                if isinstance(value, dict):
+            for key, value in config.items(): # .item() method to access values in addition to keys of dict
+                if isinstance(value, dict): # quand la valeur est un dictionnaire elle meme
                     for sub_key, sub_value in value.items():
                         mlflow.log_param(f"{key}.{sub_key}", sub_value)
                 else:
                     mlflow.log_param(key, value)
             
             logger.info("Logged configuration parameters to MLflow")
-            
-            # run the pipeline based on configuration
+
+
+            # ---------- running the pipeline & get metrics output ------------
             pipeline_name = config.get("pipeline", "line_to_text")
+            pipeline = PipelineFactory.create(pipeline_name, config)
+
+            logger.info("Running pipeline: %s", pipeline.get_name())
+            metrics = pipeline.run()
             
-            if pipeline_name == "line_to_text":
-                metrics = run_pipeline(config)
-            else:
-                raise ValueError(f"Unknown pipeline: {pipeline_name}")
-            
-            # Log metrics and dataset info
+            # ---------- Log metrics and dataset info ------------
             for metric_name, metric_value in metrics.items():
                 if metric_name == "dataset_info":
+                    # here this spetial treatment to organize the info logged in MLflow UI
                     # Log dataset information as parameters
                     dataset_info = metric_value
+                    # maybe dataset info should be logged in log_metric instead of log_param 
                     for key, value in dataset_info.items():
                         mlflow.log_param(f"dataset.{key}", value)
                 else:

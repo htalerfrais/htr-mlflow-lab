@@ -1,4 +1,4 @@
-"""Data loader package."""
+"""Data importer package."""
 
-from .base import DataLoader
-from .line_loader import IAMLineLoader
+from .base import DataImporter
+from .line_importer import IAMLineImporter

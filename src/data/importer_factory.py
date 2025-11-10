@@ -6,6 +6,7 @@ from typing import Dict, Type
 
 from src.data.base import DataImporter
 from src.data.line_importer import IAMLineImporter
+from src.data.local_importer import LocalLineImporter
 
 
 class DataImporterFactory:
@@ -16,6 +17,8 @@ class DataImporterFactory:
     # Pre-register built-in importers
     for _name in ("teklia/iam-line", "iam", "iam-line"):
         _registry[_name] = IAMLineImporter
+    for _name in ("local_lines", "local-line-dataset"):
+        _registry[_name] = LocalLineImporter
 
     @classmethod
     def register(cls, name: str, importer_class: Type[DataImporter]) -> None:

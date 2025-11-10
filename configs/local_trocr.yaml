@@ -1,0 +1,13 @@
+experiment_name: "Local TrOCR"
+run_name: "trocr-local-test"
+pipeline: "line_to_text"
+dataset: "local_lines"
+importer:
+  images_dir: "data/pero_dataset/dataset_test_1/lines_test_1_10first"
+  ground_truth_path: "data/pero_dataset/dataset_test_1/gt_test_1_10first.json"
+  image_template: "line_{id}.jpg"
+model: "trocr"
+params:
+  pretrained_model_name: "microsoft/trocr-base-handwritten"
+  device: null
+  max_new_tokens: 256

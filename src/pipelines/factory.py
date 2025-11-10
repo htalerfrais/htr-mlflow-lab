@@ -41,7 +41,11 @@ class PipelineFactory:
         if model_params is not None and not isinstance(model_params, dict):
             raise ValueError("Configuration field 'params' must be a dictionary if provided")
 
-        data_importer = DataImporterFactory.create(dataset_name)
+        importer_params = config.get("importer")
+        if importer_params is not None and not isinstance(importer_params, dict):
+            raise ValueError("Configuration field 'importer' must be a dictionary if provided")
+
+        data_importer = DataImporterFactory.create(dataset_name, **(importer_params or {}))
         model = ModelFactory.create(model_name, model_params)
 
         return pipeline_class(data_importer=data_importer, model=model)

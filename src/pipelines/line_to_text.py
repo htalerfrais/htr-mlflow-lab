@@ -19,6 +19,9 @@ class LineToTextPipeline(Pipeline):
         self._data_importer = data_importer
         self._model = model
 
+    def get_name(self) -> str:
+        return "line_to_text"
+
     def run(self) -> Dict[str, Any]:
         logger.info("Starting line-to-text pipeline with model %s", self._model.get_name())
 

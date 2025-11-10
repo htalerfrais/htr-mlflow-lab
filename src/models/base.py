@@ -22,3 +22,5 @@ class OCRModel(ABC):
     def get_name(self) -> str:
         """Return a human-readable model name."""
 
+
+# plus tard des méthodes de training ici par exemple

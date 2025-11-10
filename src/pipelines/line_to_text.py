@@ -3,7 +3,7 @@
 import logging
 from typing import Dict, Any
 
-from src.data_loaders.base import DataLoader
+from src.data.base import DataProvider
 from src.models.base import OCRModel
 from src.pipelines.base import Pipeline
 from src.utils.metrics import calculate_cer, calculate_wer
@@ -15,18 +15,15 @@ logger = logging.getLogger(__name__)
 class LineToTextPipeline(Pipeline):
     """Run OCR on line-level images and compute accuracy metrics."""
 
-    def __init__(self, data_loader: DataLoader, model: OCRModel) -> None:
-        self._data_loader = data_loader
+    def __init__(self, data_provider: DataProvider, model: OCRModel) -> None:
+        self._data_provider = data_provider
         self._model = model
-
-    def get_name(self) -> str:
-        return "line_to_text"
 
     def run(self) -> Dict[str, Any]:
         logger.info("Starting line-to-text pipeline with model %s", self._model.get_name())
 
         try:
-            samples, dataset_info = self._data_loader.load_data()
+            samples, dataset_info = self._data_provider.load_data()
         except Exception as exc:
             logger.error("Failed to load data: %s", exc)
             raise

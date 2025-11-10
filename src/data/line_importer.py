@@ -1,5 +1,5 @@
-# src/data_loaders/line_loader.py
-"""IAM dataset loader implementation."""
+# src/data_importers/line_importer.py
+"""IAM dataset importer implementation."""
 
 import logging
 import os
@@ -8,20 +8,20 @@ from typing import List, Tuple
 
 from datasets import load_dataset
 
-from src.data_loaders.base import DataLoader, Sample, DatasetInfo
+from src.data.base import DataImporter, Sample, DatasetInfo
 
 
 logger = logging.getLogger(__name__)
 
 
-class IAMLineLoader(DataLoader):
-    """Load IAM line-level samples from Hugging Face."""
+class IAMLineImporter(DataImporter):
+    """Import IAM line-level samples from Hugging Face."""
 
     def __init__(self, dataset_name: str = "Teklia/IAM-line", config_name: str = "default") -> None:
         self._dataset_name = dataset_name
         self._config_name = config_name
 
-    def load_data(self, split: str = "validation") -> Tuple[List[Sample], DatasetInfo]:
+    def import_data(self, split: str = "validation") -> Tuple[List[Sample], DatasetInfo]:
         try:
             dataset = load_dataset(self._dataset_name, self._config_name)
 
@@ -39,7 +39,7 @@ class IAMLineLoader(DataLoader):
 
                 samples.append((image_path, text))
 
-            logger.info("Loaded %s sample(s) from %s (%s split)", len(samples), self._dataset_name, split)
+            logger.info("Imported %s sample(s) from %s (%s split)", len(samples), self._dataset_name, split)
 
             dataset_info: DatasetInfo = {
                 "dataset_name": self._dataset_name,
@@ -51,7 +51,4 @@ class IAMLineLoader(DataLoader):
             return samples, dataset_info
 
         except Exception as exc:
-            raise Exception(f"Failed to load IAM dataset: {exc}") from exc
-
-    def get_name(self) -> str:
-        return "IAM-line"
+            raise Exception(f"Failed to import IAM dataset: {exc}") from exc

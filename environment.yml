@@ -14,3 +14,4 @@ dependencies:
       - datasets
       - python-Levenshtein
       - pillow
+      - transformers

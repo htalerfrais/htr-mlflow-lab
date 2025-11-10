@@ -1,0 +1,9 @@
+experiment_name: "IAM TrOCR"
+run_name: "trocr-base-handwritten"
+pipeline: "line_to_text"
+dataset: "teklia/iam-line"
+model: "trocr"
+params:
+  pretrained_model_name: "microsoft/trocr-base-handwritten"
+  device: null  # set to "cuda" or "cpu" to force a device
+  max_new_tokens: 256

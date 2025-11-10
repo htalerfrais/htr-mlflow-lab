@@ -6,6 +6,7 @@ from typing import Dict, Type
 
 from src.models.base import OCRModel
 from src.models.tesseract_model import TesseractModel
+from src.models.trocr_model import TrOCRModel
 
 
 class ModelFactory:
@@ -15,6 +16,8 @@ class ModelFactory:
 
     for _name in ("tesseract", "tesseract-ocr"):
         _registry[_name] = TesseractModel
+    for _name in ("trocr", "trocr-base", "microsoft/trocr-base-handwritten"):
+        _registry[_name] = TrOCRModel
 
     @classmethod
     def register(cls, name: str, model_class: Type[OCRModel]) -> None:
@@ -37,6 +40,13 @@ class ModelFactory:
             return TesseractModel(
                 lang=params.get("tesseract_language", "eng"),
                 engine_mode=params.get("tesseract_engine_mode", 3),
+            )
+
+        if model_class is TrOCRModel:
+            return TrOCRModel(
+                pretrained_model_name=params.get("pretrained_model_name", "microsoft/trocr-base-handwritten"),
+                device=params.get("device"),
+                max_new_tokens=params.get("max_new_tokens", 256),
             )
 
         # Default instantiation for models that accept **params

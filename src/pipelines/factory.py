@@ -18,15 +18,10 @@ class PipelineFactory:
     }
 
     @classmethod
-    def register(cls, name: str, pipeline_class: Type[Pipeline]) -> None:
-        """Register a new pipeline under the given name."""
-
-        cls._registry[name.lower()] = pipeline_class
-
-    @classmethod
     def create(cls, pipeline_name: str, config: Dict[str, object]) -> Pipeline:
         """Create a pipeline instance for the provided pipeline name."""
 
+        # check if called pipeline_name from config file is in the registery of the factory
         pipeline_class = cls._registry.get(pipeline_name.lower())
         if pipeline_class is None:
             available = ", ".join(sorted(cls._registry.keys())) or "<none>"

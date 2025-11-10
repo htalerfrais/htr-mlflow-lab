@@ -8,7 +8,7 @@ from typing import List, Tuple
 
 from datasets import load_dataset
 
-from src.data_loaders.base import DataLoader, Sample, DatasetInfo
+from src.data.base import DataLoader, Sample, DatasetInfo
 
 
 logger = logging.getLogger(__name__)

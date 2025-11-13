@@ -1,12 +1,10 @@
-"""Abstract base classes for data importers."""
-
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Dict, Any
 
 
-Sample = Tuple[str, str]
+Sample = Tuple[str, str] # image path, ground truth text
 DatasetInfo = Dict[str, Any]
 
 

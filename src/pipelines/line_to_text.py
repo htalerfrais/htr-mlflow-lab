@@ -37,6 +37,7 @@ class LineToTextPipeline(Pipeline):
 
         total_cer = 0.0
         total_wer = 0.0
+        predictions = []
 
         for index, (image_path, ground_truth) in enumerate(samples, start=1):
             logger.info("Processing sample %s/%s: %s", index, num_samples, image_path)
@@ -49,6 +50,12 @@ class LineToTextPipeline(Pipeline):
 
                 total_cer += cer
                 total_wer += wer
+
+                # Collect predictions for MLflow logging
+                predictions.append({
+                    "ground_truth": ground_truth,
+                    "prediction": prediction,
+                })
 
                 logger.info("Sample %s - CER: %.4f, WER: %.4f", index, cer, wer)
                 logger.info("Ground truth: '%s'", ground_truth)
@@ -71,4 +78,5 @@ class LineToTextPipeline(Pipeline):
             "final_cer": final_cer,
             "final_wer": final_wer,
             "dataset_info": dataset_info,
+            "predictions": predictions,
         }

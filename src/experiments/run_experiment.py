@@ -5,6 +5,7 @@ import mlflow
 import logging
 import sys
 import os
+import pandas as pd
 from typing import Dict, Any
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -68,17 +69,33 @@ def log_config_to_mlflow(config: Dict[str, Any]) -> None:
 
 
 def log_metrics_to_mlflow(metrics: Dict[str, Any]) -> None:
-    """Log metrics to MLflow, handling special cases like dataset_info."""
+    """Log metrics to MLflow, handling special cases like dataset_info and predictions."""
     for metric_name, metric_value in metrics.items():
         if metric_name == "dataset_info":
             # Log dataset information as parameters
             for key, value in metric_value.items():
                 mlflow.log_param(f"dataset.{key}", value)
+        elif metric_name == "predictions":
+            # Skip predictions here, they will be logged separately as a table
+            continue
         else:
             # Log regular metrics
             mlflow.log_metric(metric_name, metric_value)
     
     logger.info(f"Logged metrics to MLflow: {list(metrics.keys())}")
+
+
+def log_predictions_table(metrics: Dict[str, Any]) -> None:
+    """Log ground truth - prediction pairs as MLflow table."""
+    if "predictions" not in metrics or not metrics["predictions"]:
+        return
+    
+    try:
+        df = pd.DataFrame(metrics["predictions"])
+        mlflow.log_table(data=df, artifact_file="predictions.json")
+        logger.info(f"Logged {len(df)} predictions to MLflow table")
+    except Exception as e:
+        logger.warning(f"Failed to log predictions table: {e}")
 
 
 def run_pipeline(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -106,6 +123,7 @@ def run_experiment(config_path: str) -> None:
             log_config_to_mlflow(config)
             metrics = run_pipeline(config)
             log_metrics_to_mlflow(metrics)
+            log_predictions_table(metrics)
             
             logger.info(f"Experiment completed successfully. Metrics: {metrics}")
             

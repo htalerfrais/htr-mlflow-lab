@@ -1,5 +1,5 @@
 experiment_name: "Local TrOCR"
-run_name: "trocr-local-test"
+run_name: "trocr-local-test-with-artifacts"
 pipeline: "line_to_text"
 dataset: "local_lines"
 model: "trocr"

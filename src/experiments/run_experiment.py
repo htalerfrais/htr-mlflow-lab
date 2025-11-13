@@ -7,20 +7,22 @@ import sys
 import os
 import pandas as pd
 from typing import Dict, Any
+from dotenv import load_dotenv
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(THIS_DIR, "..", ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
+
 from src.utils.git_utils import get_current_git_commit
 from src.pipelines.factory import PipelineFactory
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Configuration
-MLFLOW_TRACKING_URI = "http://13.60.230.97:5000/"
 
 
 def load_config(config_path: str) -> Dict[str, Any]:

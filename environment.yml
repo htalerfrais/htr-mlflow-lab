@@ -15,3 +15,6 @@ dependencies:
       - python-Levenshtein
       - pillow
       - transformers
+      - pandas
+      - boto3
+      - python-dotenv

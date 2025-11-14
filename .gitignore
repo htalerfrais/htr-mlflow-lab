@@ -1,6 +1,9 @@
 # Data folder - contains datasets that should not be committed
 /data/
 
+# Environment variables
+.env
+
 # Python
 __pycache__/
 *.py[cod]

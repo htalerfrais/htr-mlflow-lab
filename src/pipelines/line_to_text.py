@@ -1,5 +1,3 @@
-"""Line-to-text pipeline implementation."""
-
 import logging
 from typing import Dict, Any
 

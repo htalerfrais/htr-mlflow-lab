@@ -1,5 +1,3 @@
-"""Factory for creating OCR model instances."""
-
 from __future__ import annotations
 
 from typing import Dict, Type

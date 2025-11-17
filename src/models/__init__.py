@@ -1,6 +1,2 @@
-"""Model package."""
-
-from .base import OCRModel
-from .tesseract_model import TesseractModel
-from .trocr_model import TrOCRModel
-
+# src/models/__init__.py
+# ici on met le code servant à définir les modèles que l'on va utiliser

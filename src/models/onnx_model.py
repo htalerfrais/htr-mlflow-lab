@@ -7,18 +7,22 @@ from PIL import Image
 from src.models.base import OCRModel, ImageInput
 
 
+# Default charset: lowercase + uppercase + digits + common punctuation
+DEFAULT_CHARSET = list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,;:!?'-")
+
+
 class ONNXModel(OCRModel):
     """Wrapper around ONNX Runtime for OCR inference."""
 
     def __init__(
         self,
-        onnx_path: str,
-        charset: list[str],
+        onnx_path: str = "models_local/model-crnn1.onnx",
+        charset: list[str] | None = None,
         device: str | None = None,
-        input_size: tuple[int, int] | None = None,  # (height, width), optionnel
+        input_size: tuple[int, int] | None = None, #optionnel
     ) -> None:
         self._onnx_path = onnx_path
-        self._charset = charset
+        self._charset = charset if charset is not None else DEFAULT_CHARSET
         self._device = device or "cpu"
         self._input_size = input_size
         

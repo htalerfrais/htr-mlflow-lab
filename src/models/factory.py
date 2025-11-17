@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Dict, Type
 
 from src.models.base import OCRModel
+from src.models.onnx_model import ONNXModel
 from src.models.tesseract_model import TesseractModel
 from src.models.trocr_model import TrOCRModel
 
@@ -13,6 +14,7 @@ class ModelFactory:
     _registry: Dict[str, Type[OCRModel]] = {
         "tesseract": TesseractModel,
         "trocr": TrOCRModel,
+        "onnx": ONNXModel,
     }
 
     @classmethod
@@ -26,3 +28,6 @@ class ModelFactory:
 
         return model_class()
 
+    # a rendre plus dynamique en utilisant les arguments du fichier de config
+    # on utilise des arguments plus précis de la liste de config des qu'on veut comparer des resultats obtenus avec des paramètres différents pour un meme model
+    # se met en place facilement

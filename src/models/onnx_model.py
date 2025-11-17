@@ -64,16 +64,15 @@ class ONNXModel(OCRModel):
     
     def _greedy_decode_ctc(self, predictions: np.ndarray) -> str:
         pred_indices = np.argmax(predictions[0], axis=-1)
-        blank_idx = len(self._charset)
         
         decoded_indices = []
         previous = -1
         for idx in pred_indices:
-            if idx != blank_idx and idx != previous:
-                decoded_indices.append(idx)
+            if idx != 0 and idx != previous and idx <= len(self._charset):
+                decoded_indices.append(idx - 1)
             previous = idx
         
-        text = ''.join(self._charset[idx] for idx in decoded_indices if idx < len(self._charset))
+        text = ''.join(self._charset[idx] for idx in decoded_indices if 0 <= idx < len(self._charset))
         return text
 
     def get_name(self) -> str:

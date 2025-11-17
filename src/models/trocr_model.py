@@ -26,13 +26,13 @@ class TrOCRModel(OCRModel):
         self._model.eval()
 
     def predict(self, image: ImageInput) -> str:
-        pil_image = Image.open(image).convert("RGB") if isinstance(image, str) else image.convert("RGB")
+        pil_image = Image.open(image).convert("RGB") if isinstance(image, str) else image.convert("RGB") # convert PIL image into RGB format (handles images and paths of images)
 
         with torch.no_grad():
-            inputs = self._processor(images=pil_image, return_tensors="pt").pixel_values.to(self._device)
+            inputs = self._processor(images=pil_image, return_tensors="pt").pixel_values.to(self._device) # convert image to tensor and send to device
             generated_ids = self._model.generate(inputs, max_new_tokens=self._max_new_tokens)
 
-        text = self._processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        text = self._processor.batch_decode(generated_ids, skip_special_tokens=True)[0] #decode vocabulary ids into text tokens. 
         return text.strip()
 
     def get_name(self) -> str:

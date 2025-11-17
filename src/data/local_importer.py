@@ -16,7 +16,7 @@ class LocalLineImporter(DataImporter):
 
     def __init__(
         self,
-          images_dir: str = "data/pero_dataset/dataset_test_1/lines_test_1_10first",
+          images_dir: str = "data_local/pero_dataset/dataset_test_1/lines_test_1_10first",
           ground_truth_path: str = "data/pero_dataset/dataset_test_1/gt_test_1_10first.json",
           image_template: str = "line_{id}.jpg"
     ) -> None:

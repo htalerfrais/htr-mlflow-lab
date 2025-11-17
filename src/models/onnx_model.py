@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from itertools import groupby
+
 import numpy as np
 import onnxruntime as ort
 from PIL import Image
@@ -42,7 +44,7 @@ class ONNXModel(OCRModel):
         new_w, new_h = int(img_w * scale), int(img_h * scale)
         
         resized = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        new_image = Image.new('RGB', (target_w, target_h), (255, 255, 255))
+        new_image = Image.new('RGB', (target_w, target_h), (255, 255, 255)) #padding en blanc
         new_image.paste(resized, ((target_w - new_w) // 2, (target_h - new_h) // 2))
         
         return new_image
@@ -67,18 +69,10 @@ class ONNXModel(OCRModel):
         return text.strip()
     
     def _greedy_decode_ctc(self, predictions: np.ndarray) -> str:
-        pred_indices = np.argmax(predictions[0], axis=-1)
-        blank_idx = len(self._charset)
-        
-        decoded_indices = []
-        previous = -1
-        for idx in pred_indices:
-            if idx != blank_idx and idx != previous:
-                decoded_indices.append(idx)
-            previous = idx
-        
-        text = ''.join(self._charset[idx] for idx in decoded_indices if idx < len(self._charset))
-        return text
+        argmax_preds = np.argmax(predictions, axis=-1)
+        grouped_preds = [[k for k, _ in groupby(preds)] for preds in argmax_preds]
+        texts = ["".join([self._charset[k] for k in group if k < len(self._charset)]) for group in grouped_preds]
+        return texts[0]
 
     def get_name(self) -> str:
         return f"ONNXModel(model={self._onnx_path})"

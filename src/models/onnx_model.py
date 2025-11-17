@@ -7,7 +7,6 @@ from PIL import Image
 from src.models.base import OCRModel, ImageInput
 
 
-# Default charset: lowercase + uppercase + digits + common punctuation
 DEFAULT_CHARSET = list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,;:!?'-")
 
 
@@ -19,42 +18,33 @@ class ONNXModel(OCRModel):
         onnx_path: str = "models_local/model-crnn1.onnx",
         charset: list[str] | None = None,
         device: str | None = None,
-        input_size: tuple[int, int] | None = None, #optionnel
+        input_size: tuple[int, int] | None = (96, 1408),
     ) -> None:
         self._onnx_path = onnx_path
         self._charset = charset if charset is not None else DEFAULT_CHARSET
         self._device = device or "cpu"
         self._input_size = input_size
         
-        # Convert device string to ONNX Runtime providers
         if self._device == "cuda":
             providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
         else:
             providers = ['CPUExecutionProvider']
         
         self._session = ort.InferenceSession(onnx_path, providers=providers)
-        
-        # Get input/output names from the model
         self._input_name = self._session.get_inputs()[0].name
         self._output_name = self._session.get_outputs()[0].name
 
     def predict(self, image: ImageInput) -> str:
-        # Load image (path or PIL.Image)
         pil_image = Image.open(image).convert("RGB") if isinstance(image, str) else image.convert("RGB")
         
-        # Resize if input_size is specified
         if self._input_size is not None:
             pil_image = pil_image.resize((self._input_size[1], self._input_size[0]))
         
         # Convert to numpy array (C, H, W) format with batch dimension
         img_array = np.array(pil_image).astype(np.float32)
-        img_array = np.transpose(img_array, (2, 0, 1))  # HWC -> CHW
-        img_array = np.expand_dims(img_array, axis=0)   # Add batch: (1, C, H, W)
+        img_array = np.expand_dims(img_array, axis=0)
         
-        # Run inference
         outputs = self._session.run([self._output_name], {self._input_name: img_array})
-        
-        # Greedy CTC decode
         predictions = outputs[0]
         text = self._greedy_decode_ctc(predictions)
         
@@ -65,11 +55,10 @@ class ONNXModel(OCRModel):
         # Get best prediction for each timestep
         pred_indices = np.argmax(predictions[0], axis=-1)
         
-        # Collapse repetitions and remove blank (index 0)
         decoded_indices = []
         previous = -1
         for idx in pred_indices:
-            if idx != 0 and idx != previous:  # 0 = blank token
+            if idx != 0 and idx != previous:
                 decoded_indices.append(idx)
             previous = idx
         

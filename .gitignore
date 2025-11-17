@@ -1,5 +1,6 @@
 # Data folder - contains dataset we do not commit, have to be downloaded manually
-/data/
+/data_local/
+/models_local/
 
 # Environment variables
 .env

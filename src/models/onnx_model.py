@@ -44,7 +44,7 @@ class ONNXModel(OCRModel):
         new_w, new_h = int(img_w * scale), int(img_h * scale)
         
         resized = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        new_image = Image.new('RGB', (target_w, target_h), (255, 255, 255)) #padding en blanc
+        new_image = Image.new('RGB', (target_w, target_h), (0, 0, 0))
         new_image.paste(resized, ((target_w - new_w) // 2, (target_h - new_h) // 2))
         
         return new_image

@@ -7,7 +7,7 @@ from PIL import Image
 from src.models.base import OCRModel, ImageInput
 
 
-DEFAULT_CHARSET = list("'3.FR20JWIe8CyBowxTV5rgOYQ,ipPcqDGnMAK(Eb6)fH:'9LlUt;jsz m4&1#kZ-adNhvu7!S?")
+DEFAULT_CHARSET = list('\'3.FR20JWIe8CyBowxTV5rgOYQ,ipPcqDGnMAK(Eb6)fH:"9LlUt;jsz m4&1#kZ-adNhvu7!S?')
 
 
 class ONNXModel(OCRModel):
@@ -53,7 +53,7 @@ class ONNXModel(OCRModel):
         if self._input_size is not None:
             pil_image = self._resize_keep_aspect_ratio(pil_image, self._input_size)
         
-        img_array = np.array(pil_image).astype(np.float32) / 255.0
+        img_array = np.array(pil_image).astype(np.float32)
         img_array = np.expand_dims(img_array, axis=0)
         
         outputs = self._session.run([self._output_name], {self._input_name: img_array})
@@ -64,15 +64,16 @@ class ONNXModel(OCRModel):
     
     def _greedy_decode_ctc(self, predictions: np.ndarray) -> str:
         pred_indices = np.argmax(predictions[0], axis=-1)
+        blank_idx = len(self._charset)
         
         decoded_indices = []
         previous = -1
         for idx in pred_indices:
-            if idx != 0 and idx != previous and idx <= len(self._charset):
-                decoded_indices.append(idx - 1)
+            if idx != blank_idx and idx != previous:
+                decoded_indices.append(idx)
             previous = idx
         
-        text = ''.join(self._charset[idx] for idx in decoded_indices if 0 <= idx < len(self._charset))
+        text = ''.join(self._charset[idx] for idx in decoded_indices if idx < len(self._charset))
         return text
 
     def get_name(self) -> str:

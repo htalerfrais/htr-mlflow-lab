@@ -7,7 +7,7 @@ from PIL import Image
 from src.models.base import OCRModel, ImageInput
 
 
-DEFAULT_CHARSET = list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,;:!?'-")
+DEFAULT_CHARSET = list("'3.FR20JWIe8CyBowxTV5rgOYQ,ipPcqDGnMAK(Eb6)fH:'9LlUt;jsz m4&1#kZ-adNhvu7!S?")
 
 
 class ONNXModel(OCRModel):
@@ -33,15 +33,27 @@ class ONNXModel(OCRModel):
         self._session = ort.InferenceSession(onnx_path, providers=providers)
         self._input_name = self._session.get_inputs()[0].name
         self._output_name = self._session.get_outputs()[0].name
+    
+    def _resize_keep_aspect_ratio(self, image: Image.Image, target_size: tuple[int, int]) -> Image.Image:
+        target_h, target_w = target_size
+        img_w, img_h = image.size
+        
+        scale = min(target_w / img_w, target_h / img_h)
+        new_w, new_h = int(img_w * scale), int(img_h * scale)
+        
+        resized = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        new_image = Image.new('RGB', (target_w, target_h), (255, 255, 255))
+        new_image.paste(resized, ((target_w - new_w) // 2, (target_h - new_h) // 2))
+        
+        return new_image
 
     def predict(self, image: ImageInput) -> str:
         pil_image = Image.open(image).convert("RGB") if isinstance(image, str) else image.convert("RGB")
         
         if self._input_size is not None:
-            pil_image = pil_image.resize((self._input_size[1], self._input_size[0]))
+            pil_image = self._resize_keep_aspect_ratio(pil_image, self._input_size)
         
-        # Convert to numpy array (C, H, W) format with batch dimension
-        img_array = np.array(pil_image).astype(np.float32)
+        img_array = np.array(pil_image).astype(np.float32) / 255.0
         img_array = np.expand_dims(img_array, axis=0)
         
         outputs = self._session.run([self._output_name], {self._input_name: img_array})
@@ -51,19 +63,17 @@ class ONNXModel(OCRModel):
         return text.strip()
     
     def _greedy_decode_ctc(self, predictions: np.ndarray) -> str:
-        """Greedy CTC decoding: collapse repetitions and remove blank token."""
-        # Get best prediction for each timestep
         pred_indices = np.argmax(predictions[0], axis=-1)
+        blank_idx = len(self._charset)
         
         decoded_indices = []
         previous = -1
         for idx in pred_indices:
-            if idx != 0 and idx != previous:
+            if idx != blank_idx and idx != previous:
                 decoded_indices.append(idx)
             previous = idx
         
-        # Map indices to characters using charset
-        text = ''.join(self._charset[idx - 1] for idx in decoded_indices if 1 <= idx <= len(self._charset))
+        text = ''.join(self._charset[idx] for idx in decoded_indices if idx < len(self._charset))
         return text
 
     def get_name(self) -> str:

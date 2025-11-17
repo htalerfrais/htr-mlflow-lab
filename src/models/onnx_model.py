@@ -44,8 +44,8 @@ class ONNXModel(OCRModel):
         new_w, new_h = int(img_w * scale), int(img_h * scale)
         
         resized = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        new_image = Image.new('RGB', (target_w, target_h), (0, 0, 0))
-        new_image.paste(resized, (0, 0))
+        new_image = Image.new('RGB', (target_w, target_h), (255, 255, 255)) #padding en blanc
+        new_image.paste(resized, ((target_w - new_w) // 2, (target_h - new_h) // 2))
         
         return new_image
 
@@ -56,6 +56,10 @@ class ONNXModel(OCRModel):
             pil_image = self._resize_keep_aspect_ratio(pil_image, self._input_size)
         
         img_array = np.array(pil_image).astype(np.float32)
+        
+        # Convert RGB to BGR (same as what OpenCV reads)
+        img_array = img_array[:, :, ::-1]
+
         img_array = np.expand_dims(img_array, axis=0)
         
         outputs = self._session.run([self._output_name], {self._input_name: img_array})

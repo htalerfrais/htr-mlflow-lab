@@ -4,8 +4,11 @@
 # first we copy paste the CRNN model implementation from repository
 # then we wrapp it in our OCRModel class
 
+from __future__ import annotations
+
 
 import torch.nn as nn
+from PIL import Image
 from src.models.base import OCRModel
 
 
@@ -107,25 +110,12 @@ class CRNNModel(OCRModel):
         device: str | None = None,         # Device ('cpu' ou 'cuda')
         alphabet: str = "0123456789abcdefghijklmnopqrstuvwxyz", # Vocabulaire
     ) -> None:
-        """
-        Initialise le modèle CRNN.
-        
-        Args:
-            imgH: Hauteur des images d'entrée (doit être multiple de 16)
-            nc: Nombre de canaux (1 pour grayscale, 3 pour RGB)
-            nclass: Nombre de classes de sortie (len(alphabet) + 1 pour CTC blank)
-            nh: Taille des couches cachées du LSTM
-            leakyRelu: Utiliser LeakyReLU au lieu de ReLU
-            model_path: Chemin vers les poids pré-entraînés (si None, modèle non entraîné)
-            device: Device PyTorch ('cpu' ou 'cuda')
-            alphabet: Chaîne contenant tous les caractères possibles
-        """
         self._imgH = imgH
         self._nc = nc
         self._nclass = nclass
         self._nh = nh
         self._leakyRelu = leakyRelu
-        self._model_path = model_path
+        self._model_path = model_path or "models_local/crnn.pth"
         self._alphabet = alphabet
         self._device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         
@@ -162,15 +152,7 @@ class CRNNModel(OCRModel):
         self._idx_to_char[0] = ""  # Blank token pour CTC
     
     def _preprocess_image(self, image: Image.Image) -> torch.Tensor:
-        """
-        Prétraite l'image pour le modèle CRNN.
-        
-        Args:
-            image: Image PIL
-            
-        Returns:
-            Tensor PyTorch de forme (1, nc, imgH, imgW)
-        """
+        # grayscale, resize, convert in tensor, normalize 0-1, (using transform)
         # Convertir en grayscale si nécessaire
         if self._nc == 1:
             image = image.convert("L")
@@ -181,8 +163,6 @@ class CRNNModel(OCRModel):
         w, h = image.size
         ratio = w / float(h)
         imgW = int(self._imgH * ratio)
-        
-        # Redimensionner l'image
         image = image.resize((imgW, self._imgH), Image.BILINEAR)
         
         # Convertir en tensor et normaliser [0, 1]
@@ -198,16 +178,6 @@ class CRNNModel(OCRModel):
         return tensor
     
     def _decode_predictions(self, preds: torch.Tensor) -> str:
-        """
-        Décode les prédictions du modèle en texte.
-        
-        Args:
-            preds: Prédictions du modèle de forme (seq_len, batch, nclass)
-            
-        Returns:
-            Texte décodé
-        """
-        # Prendre l'argmax pour obtenir les indices de classes
         _, preds = preds.max(2)  # (seq_len, batch)
         preds = preds.squeeze(1)  # (seq_len,)
         
@@ -217,12 +187,10 @@ class CRNNModel(OCRModel):
         
         for idx in preds:
             idx = idx.item()
-            
             # Ignorer le blank token (0)
             if idx == 0:
                 prev_char = None
                 continue
-            
             # Ignorer les répétitions (règle CTC)
             char = self._idx_to_char.get(idx, "")
             if char != prev_char:
@@ -232,34 +200,15 @@ class CRNNModel(OCRModel):
         return "".join(decoded_text)
     
     def predict(self, image: ImageInput) -> str:
-        """
-        Effectue la prédiction OCR sur l'image fournie.
-        
-        Args:
-            image: Chemin vers l'image ou objet PIL.Image
-            
-        Returns:
-            Texte prédit
-        """
-        # Charger l'image si c'est un chemin
+
         pil_image = Image.open(image) if isinstance(image, str) else image
-        
-        # Prétraiter l'image
         tensor = self._preprocess_image(pil_image).to(self._device)
         
-        # Prédiction
         with torch.no_grad():
             preds = self._model(tensor)  # (seq_len, batch, nclass)
         
-        # Décoder les prédictions
         text = self._decode_predictions(preds)
-        
         return text
     
     def get_name(self) -> str:
-        """Retourne le nom du modèle."""
-        model_info = f"CRNN(imgH={self._imgH}, nc={self._nc}, nh={self._nh}"
-        if self._model_path:
-            model_info += f", pretrained={self._model_path}"
-        model_info += ")"
-        return model_info
+        return "CRNN-pytorch"

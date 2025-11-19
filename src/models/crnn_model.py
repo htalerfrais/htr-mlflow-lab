@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 
+import os
+import logging
 import torch.nn as nn
 from PIL import Image
-from src.models.base import OCRModel
+from src.models.base import OCRModel, ImageInput
 
 
 class BidirectionalLSTM(nn.Module):
@@ -122,7 +124,6 @@ class CRNNModel(OCRModel):
         # Vérification de cohérence
         if nclass != len(alphabet) + 1:
             # +1 pour le blank token du CTC
-            import logging
             logging.warning(
                 f"nclass ({nclass}) ne correspond pas à len(alphabet)+1 ({len(alphabet)+1}). "
                 f"Ajustement automatique à {len(alphabet)+1}"
@@ -140,8 +141,12 @@ class CRNNModel(OCRModel):
         )
         
         # Charger les poids pré-entraînés si fournis
-        if model_path is not None:
-            self._model.load_state_dict(torch.load(model_path, map_location=self._device))
+        if self._model_path and os.path.exists(self._model_path):
+            try:
+                state_dict = torch.load(self._model_path, map_location=self._device, weights_only=False)
+                self._model.load_state_dict(state_dict)
+            except Exception as e:
+                logging.error(f"Failed to load weights from {self._model_path}: {e}")
         
         self._model.to(self._device)
         self._model.eval()

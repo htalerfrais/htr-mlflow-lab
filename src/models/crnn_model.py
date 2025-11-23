@@ -158,8 +158,8 @@ class CRNNModel(OCRModel):
     
     def __init__(
         self,
-        model_path: str,
-        alphabet: str,
+        model_path: str = "models_local/crnn.pth",
+        alphabet: str = "0123456789abcdefghijklmnopqrstuvwxyz",
         img_height: int = 32,
         img_width: int = 100,
         n_hidden: int = 256,
@@ -185,7 +185,7 @@ class CRNNModel(OCRModel):
         # Initialize components
         n_class = len(alphabet) + 1  # +1 for blank token
         self.model = CRNN(img_height, n_channels, n_class, n_hidden)
-        self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+        self.model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=False))
         self.model.to(self.device)
         self.model.eval()
         

@@ -59,7 +59,6 @@ class ONNXModel(OCRModel):
         
         # Convert RGB to BGR (same as what OpenCV reads)
         img_array = img_array[:, :, ::-1]
-
         img_array = np.expand_dims(img_array, axis=0)
         
         outputs = self._session.run([self._output_name], {self._input_name: img_array})

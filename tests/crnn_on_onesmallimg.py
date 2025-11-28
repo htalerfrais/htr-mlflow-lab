@@ -10,15 +10,17 @@ from src.models.crnn_model import CRNNModel, resizeNormalize
 
 # ===== CONFIGURATION =====
 IMAGE_PATH = "data_local\pero_dataset\dataset_sizes\Hector.jpg"
-GROUND_TRUTH = "hector"
-MODEL_PATH = "models_local/crnn.pth"
+GROUND_TRUTH = "Hector"
+MODEL_PATH = "models_local/crnn.pth" 
+
+img_width = 100
 
 # ===== CHARGEMENT =====
 print("🔧 Chargement du modèle...")
 model = CRNNModel(
     model_path=MODEL_PATH,
     img_height=32,
-    img_width=280,  # Plus large pour une meilleure qualité
+    img_width=img_width,  # Plus large pour une meilleure qualité
     n_hidden=256,
     device='cpu'
 )
@@ -31,9 +33,9 @@ print("🔮 Prédiction en cours...")
 prediction = model.predict(img_original)
 
 # ===== VISUALISATION =====
-transform = resizeNormalize((280, 32))
+transform = resizeNormalize((img_width, 32))
 tensor = transform(img_original)
-img_resized = img_original.resize((280, 32), Image.BILINEAR)
+img_resized = img_original.resize((img_width, 32), Image.BILINEAR)
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
@@ -42,7 +44,7 @@ axes[0].set_title(f'Original ({img_original.size[0]}x{img_original.size[1]})')
 axes[0].axis('off')
 
 axes[1].imshow(img_resized, cmap='gray')
-axes[1].set_title('Après resize (280x32)')
+axes[1].set_title(f'Après resize ({img_width}x32)')
 axes[1].axis('off')
 
 plt.tight_layout()

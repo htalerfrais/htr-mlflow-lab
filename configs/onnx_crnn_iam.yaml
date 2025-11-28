@@ -1,5 +1,5 @@
 experiment_name: "ONNX CRNN"
 run_name: "onnx-crnn-IAM-line"
 pipeline: "line_to_text"
-dataset: "local_lines"
+dataset: "teklia/iam-line"
 model: "onnx"

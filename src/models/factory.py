@@ -6,6 +6,7 @@ from src.models.base import OCRModel
 from src.models.onnx_model import ONNXModel
 from src.models.tesseract_model import TesseractModel
 from src.models.trocr_model import TrOCRModel
+from src.models.crnn_model import CRNNModel
 
 
 class ModelFactory:
@@ -15,6 +16,7 @@ class ModelFactory:
         "tesseract": TesseractModel,
         "trocr": TrOCRModel,
         "onnx": ONNXModel,
+        "crnn": CRNNModel,
     }
 
     @classmethod

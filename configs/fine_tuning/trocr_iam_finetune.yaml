@@ -1,0 +1,62 @@
+# TrOCR Fine-Tuning on IAM Dataset
+# Configuration for fine-tuning TrOCR-base on handwritten text
+
+experiment:
+  name: "TrOCR-IAM-FineTune"
+  description: "Fine-tune TrOCR base model on IAM line recognition dataset"
+
+# Model configuration
+model:
+  pretrained_model_name: "microsoft/trocr-base-handwritten"
+  params:
+    max_length: 64
+    num_beams: 4
+
+# Dataset configuration
+dataset:
+  name: "Teklia/IAM-line"
+  train_split: "train"
+  eval_split: "validation"
+  # max_samples: 100  # Uncomment for quick testing
+
+# Training hyperparameters
+training:
+  num_train_epochs: 5
+  per_device_train_batch_size: 8
+  per_device_eval_batch_size: 8
+  learning_rate: 5e-5
+  weight_decay: 0.01
+  warmup_steps: 500
+  
+  # Evaluation & saving
+  evaluation_strategy: "epoch"
+  save_strategy: "epoch"
+  logging_steps: 100
+  load_best_model_at_end: true
+  metric_for_best_model: "cer"
+  greater_is_better: false
+  
+  # Performance
+  fp16: true  # Use mixed precision (requires GPU)
+  dataloader_num_workers: 4
+  
+  # Early stopping (optional)
+  # early_stopping_patience: 3
+  # early_stopping_threshold: 0.001
+
+# Output configuration
+output:
+  dir: "./models/fine_tuned_trocr_iam"
+  save_total_limit: 3  # Keep only 3 best checkpoints
+
+# MLflow tracking
+mlflow:
+  tracking_uri: "http://13.60.230.97:5000"
+  experiment_name: "TrOCR-FineTuning"
+
+# Optional: Advanced training settings
+advanced:
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  lr_scheduler_type: "linear"
+  seed: 42

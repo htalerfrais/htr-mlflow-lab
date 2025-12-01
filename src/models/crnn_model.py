@@ -190,14 +190,23 @@ class CRNNModel(OCRModel):
         self.model.eval()
         
         self.converter = strLabelConverter(alphabet)
+        # Model-specific preprocessing: resizeNormalize adapts image dimensions
+        # to match the CRNN architecture requirements (e.g., height must be multiple of 16)
+        # This is separate from common preprocessing applied before model.predict()
         self.transform = resizeNormalize((img_width, img_height))
     
     def predict(self, image: ImageInput) -> str:
         """
         Run OCR inference on an image.
         
+        Note: This method applies model-specific preprocessing (resizeNormalize)
+        to adapt the image dimensions to the CRNN architecture. Common preprocessing
+        (binarization, cropping, etc.) should be applied before calling this method
+        via the pipeline's preprocessor.
+        
         Args:
             image: Either a path to an image file or a PIL Image object
+                  (may already be preprocessed by the common preprocessor)
             
         Returns:
             str: The recognized text from the image
@@ -208,7 +217,7 @@ class CRNNModel(OCRModel):
         elif image.mode != 'L':
             image = image.convert('L')
         
-        # Preprocess
+        # Model-specific preprocessing: adapt dimensions to CRNN architecture
         image_tensor = self.transform(image)
         image_tensor = image_tensor.unsqueeze(0).to(self.device)
         

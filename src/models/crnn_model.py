@@ -139,14 +139,26 @@ class strLabelConverter(object):
 
 # ===== CLASS 4: Image preprocessor =====
 class resizeNormalize(object):
-    def __init__(self, size, interpolation=Image.BILINEAR):
-        self.size = size
+    def __init__(self, size, interpolation=Image.LANCZOS):
+        self.size = size  # (width, height)
         self.interpolation = interpolation
         self.toTensor = transforms.ToTensor()
     
     def __call__(self, img):
-        img = img.resize(self.size, self.interpolation)
-        img = self.toTensor(img)
+        # Conserver le ratio d'aspect avec padding blanc
+        target_w, target_h = self.size
+        img_w, img_h = img.size
+        
+        scale = min(target_w / img_w, target_h / img_h)
+        new_w, new_h = int(img_w * scale), int(img_h * scale)
+        
+        img = img.resize((new_w, new_h), self.interpolation)
+        
+        # Padding blanc (255 pour grayscale)
+        new_image = Image.new('L', (target_w, target_h), 255)
+        new_image.paste(img, ((target_w - new_w) // 2, (target_h - new_h) // 2))
+        
+        img = self.toTensor(new_image)
         img.sub_(0.5).div_(0.5)
         return img
 

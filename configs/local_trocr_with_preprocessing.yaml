@@ -1,4 +1,4 @@
-experiment_name: "Local TrOCR with Preprocessing"
+experiment_name: "Local TrOCR"
 run_name: "trocr-local-test-with-preprocessing"
 pipeline: "line_to_text"
 dataset: "local_lines"

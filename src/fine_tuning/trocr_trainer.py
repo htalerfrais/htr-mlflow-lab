@@ -223,7 +223,7 @@ class TrOCRFineTuner(BaseFineTuner):
             learning_rate=learning_rate,
             weight_decay=weight_decay,
             warmup_steps=warmup_steps,
-            evaluation_strategy=evaluation_strategy,
+            eval_strategy=evaluation_strategy,  # Changed from evaluation_strategy
             save_strategy=save_strategy,
             logging_steps=logging_steps,
             logging_dir=str(self.output_dir / "logs"),

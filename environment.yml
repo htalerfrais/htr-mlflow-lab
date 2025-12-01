@@ -19,3 +19,4 @@ dependencies:
       - boto3
       - python-dotenv
       - onnxruntime
+      - onnx

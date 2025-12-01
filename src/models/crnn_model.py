@@ -160,8 +160,8 @@ class CRNNModel(OCRModel):
         self,
         model_path: str = "models_local/crnn.pth",
         alphabet: str = "0123456789abcdefghijklmnopqrstuvwxyz",
-        img_height: int = 32,
-        img_width: int = 100,
+        img_height: int = 96,
+        img_width: int = 1408,
         n_hidden: int = 256,
         n_channels: int = 1,
         device: str = 'cpu'

@@ -6,6 +6,7 @@ from typing import Dict, Type, List, Union, Optional
 
 from src.pre_processing.base import ImagePreprocessor
 from src.pre_processing.identity import IdentityPreprocessor
+from src.pre_processing.resize import ResizePreprocessor
 from src.pre_processing.sequential import SequentialPreprocessor
 
 
@@ -14,6 +15,7 @@ class PreprocessorFactory:
 
     _registry: Dict[str, Type[ImagePreprocessor]] = {
         "identity": IdentityPreprocessor,
+        "resize": ResizePreprocessor,
         # Future preprocessors can be added here:
         # "binary": BinaryPreprocessor,
         # "crop": CropPreprocessor,
@@ -22,7 +24,7 @@ class PreprocessorFactory:
     @classmethod
     def create(
         cls,
-        preprocessor_config: Optional[Union[str, List[str]]] = None,
+        preprocessor_config: Optional[Union[str, Dict, List[Union[str, Dict]]]] = None,
     ) -> Optional[ImagePreprocessor]:
         """
         Create a preprocessor instance.
@@ -30,9 +32,10 @@ class PreprocessorFactory:
         Args:
             preprocessor_config:
                 - None: no preprocessor (returns None)
-                - str: name of a single preprocessor ("identity", "binary")
-                - List[str]: list of names for a SequentialPreprocessor
-                            (["identity", "binary"])
+                - str: name of a single preprocessor ("identity", "resize")
+                - Dict: config dict with "name" and optional params ({"name": "resize", "height": 128})
+                - List: list of names or config dicts for SequentialPreprocessor
+                       (["identity", {"name": "resize", "height": 128}])
 
         Returns:
             ImagePreprocessor or None if preprocessor_config is None
@@ -52,7 +55,7 @@ class PreprocessorFactory:
 
             # Create each individual preprocessor
             preprocessors = [
-                cls._create_single(name) for name in preprocessor_config
+                cls._create_single(config_item) for config_item in preprocessor_config
             ]
 
             # If only one preprocessor in the list, return it directly
@@ -62,23 +65,27 @@ class PreprocessorFactory:
             # Otherwise, create a SequentialPreprocessor
             return SequentialPreprocessor(preprocessors)
 
-        # Case 3: Simple string -> single preprocessor
+        # Case 3: Dict config -> single preprocessor with params
+        if isinstance(preprocessor_config, dict):
+            return cls._create_single(preprocessor_config)
+
+        # Case 4: Simple string -> single preprocessor
         if isinstance(preprocessor_config, str):
             return cls._create_single(preprocessor_config)
 
         # Invalid case
         raise ValueError(
             f"Invalid preprocessor config: {preprocessor_config}. "
-            f"Expected None, str, or List[str]"
+            f"Expected None, str, Dict, or List[Union[str, Dict]]"
         )
 
     @classmethod
-    def _create_single(cls, preprocessor_name: str) -> ImagePreprocessor:
+    def _create_single(cls, config: Union[str, Dict]) -> ImagePreprocessor:
         """
-        Create a single preprocessor from its name.
+        Create a single preprocessor from its name or config dict.
 
         Args:
-            preprocessor_name: Name of the preprocessor to create
+            config: Either a string name or a dict with "name" and optional params
 
         Returns:
             ImagePreprocessor: An instance of the requested preprocessor
@@ -86,6 +93,17 @@ class PreprocessorFactory:
         Raises:
             ValueError: If the preprocessor name is not in the registry
         """
+        # Handle dict config
+        if isinstance(config, dict):
+            preprocessor_name = config.get("name")
+            if not preprocessor_name:
+                raise ValueError("Preprocessor config dict must contain 'name' key")
+            params = {k: v for k, v in config.items() if k != "name"}
+        else:
+            # Handle string config (backward compatible)
+            preprocessor_name = config
+            params = {}
+
         preprocessor_class = cls._registry.get(preprocessor_name.lower())
 
         if preprocessor_class is None:
@@ -95,5 +113,6 @@ class PreprocessorFactory:
                 f"Available preprocessors: {available}"
             )
 
-        return preprocessor_class()
+        # Instantiate with params if provided, otherwise use defaults
+        return preprocessor_class(**params)
 

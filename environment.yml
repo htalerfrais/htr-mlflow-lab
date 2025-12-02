@@ -17,6 +17,7 @@ dependencies:
       - transformers
       - pandas
       - boto3
+      - google-cloud-storage
       - python-dotenv
       - onnxruntime
       - onnx

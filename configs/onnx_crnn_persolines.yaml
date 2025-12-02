@@ -1,5 +1,6 @@
 experiment_name: "ONNX CRNN Personal data"
-run_name: "onnx-crnn-personal-lines"
+run_name: "onnx-crnn-personal-lines-v2"
 pipeline: "line_to_text"
 dataset: "local_lines"
 model: "onnx"
+preprocessor: "identity"

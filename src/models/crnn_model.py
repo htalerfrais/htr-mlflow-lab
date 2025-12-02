@@ -139,14 +139,26 @@ class strLabelConverter(object):
 
 # ===== CLASS 4: Image preprocessor =====
 class resizeNormalize(object):
-    def __init__(self, size, interpolation=Image.BILINEAR):
-        self.size = size
+    def __init__(self, size, interpolation=Image.LANCZOS):
+        self.size = size  # (width, height)
         self.interpolation = interpolation
         self.toTensor = transforms.ToTensor()
     
     def __call__(self, img):
-        img = img.resize(self.size, self.interpolation)
-        img = self.toTensor(img)
+        # Conserver le ratio d'aspect avec padding blanc
+        target_w, target_h = self.size
+        img_w, img_h = img.size
+        
+        scale = min(target_w / img_w, target_h / img_h)
+        new_w, new_h = int(img_w * scale), int(img_h * scale)
+        
+        img = img.resize((new_w, new_h), self.interpolation)
+        
+        # Padding blanc (255 pour grayscale)
+        new_image = Image.new('L', (target_w, target_h), 255)
+        new_image.paste(img, ((target_w - new_w) // 2, (target_h - new_h) // 2))
+        
+        img = self.toTensor(new_image)
         img.sub_(0.5).div_(0.5)
         return img
 
@@ -161,7 +173,7 @@ class CRNNModel(OCRModel):
         model_path: str = "models_local/crnn.pth",
         alphabet: str = "0123456789abcdefghijklmnopqrstuvwxyz",
         img_height: int = 32,
-        img_width: int = 100,
+        img_width: int = 200,
         n_hidden: int = 256,
         n_channels: int = 1,
         device: str = 'cpu'
@@ -190,14 +202,23 @@ class CRNNModel(OCRModel):
         self.model.eval()
         
         self.converter = strLabelConverter(alphabet)
+        # Model-specific preprocessing: resizeNormalize adapts image dimensions
+        # to match the CRNN architecture requirements (e.g., height must be multiple of 16)
+        # This is separate from common preprocessing applied before model.predict()
         self.transform = resizeNormalize((img_width, img_height))
     
     def predict(self, image: ImageInput) -> str:
         """
         Run OCR inference on an image.
         
+        Note: This method applies model-specific preprocessing (resizeNormalize)
+        to adapt the image dimensions to the CRNN architecture. Common preprocessing
+        (binarization, cropping, etc.) should be applied before calling this method
+        via the pipeline's preprocessor.
+        
         Args:
             image: Either a path to an image file or a PIL Image object
+                  (may already be preprocessed by the common preprocessor)
             
         Returns:
             str: The recognized text from the image
@@ -208,7 +229,7 @@ class CRNNModel(OCRModel):
         elif image.mode != 'L':
             image = image.convert('L')
         
-        # Preprocess
+        # Model-specific preprocessing: adapt dimensions to CRNN architecture
         image_tensor = self.transform(image)
         image_tensor = image_tensor.unsqueeze(0).to(self.device)
         

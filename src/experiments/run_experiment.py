@@ -19,6 +19,7 @@ load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
 
 from src.utils.git_utils import get_current_git_commit
+from src.utils.visualization import create_preprocessing_visualization
 from src.pipelines.factory import PipelineFactory
 
 logging.basicConfig(level=logging.INFO)
@@ -100,15 +101,15 @@ def log_predictions_table(metrics: Dict[str, Any]) -> None:
         logger.warning(f"Failed to log predictions table: {e}")
 
 
-def run_pipeline(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Create and run the pipeline, returning metrics."""
+def run_pipeline(config: Dict[str, Any]):
+    """Create and run the pipeline, returning metrics and pipeline instance."""
     pipeline_name = config.get("pipeline", "line_to_text")
     pipeline = PipelineFactory.create(pipeline_name, config)
     
     logger.info("Running pipeline: %s", pipeline.get_name())
     metrics = pipeline.run()
     
-    return metrics
+    return metrics, pipeline
 
 
 def run_experiment(config_path: str) -> None:
@@ -123,9 +124,15 @@ def run_experiment(config_path: str) -> None:
     with mlflow.start_run(experiment_id=experiment_id, run_name=run_name):
         try:
             log_config_to_mlflow(config)
-            metrics = run_pipeline(config)
+            metrics, pipeline = run_pipeline(config)
             log_metrics_to_mlflow(metrics)
             log_predictions_table(metrics)
+            
+            # Log preprocessing visualization
+            viz_path = create_preprocessing_visualization(pipeline, num_samples=5)
+            if viz_path:
+                mlflow.log_artifact(viz_path, "preprocessing_visualization")
+                os.unlink(viz_path)  # Clean up temp file
             
             logger.info(f"Experiment completed successfully. Metrics: {metrics}")
             

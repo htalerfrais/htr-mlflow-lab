@@ -16,8 +16,9 @@ dependencies:
       - pillow
       - transformers
       - pandas
+      - matplotlib
       - boto3
-      - google-cloud-storage
+      - google-cloud-storage # for the client to handle artifact upload in bucket
       - python-dotenv
       - onnxruntime
       - onnx

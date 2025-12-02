@@ -1,5 +1,6 @@
 experiment_name: "CRNN Git"
-run_name: "crnn-git-perso + preprocess et ctc du repo"
+run_name: "crnn-git-perso-v2 + preprocess et ctc du repo"
 pipeline: "line_to_text"
 dataset: "local_lines"
 model: "crnn"
+preprocessor: "identity"

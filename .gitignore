@@ -1,5 +1,12 @@
 # Data folder - contains datasets that should not be committed
 /data/
+/local_test_md/
+
+# Environment variables (contains secrets)
+.env
+.env.local
+.venv
+
 
 # Python
 __pycache__/

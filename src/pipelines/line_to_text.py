@@ -1,11 +1,10 @@
-"""Line-to-text pipeline implementation."""
-
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from src.data.base import DataImporter
 from src.models.base import OCRModel
 from src.pipelines.base import Pipeline
+from src.pre_processing.base import ImagePreprocessor
 from src.utils.metrics import calculate_cer, calculate_wer
 
 
@@ -15,9 +14,15 @@ logger = logging.getLogger(__name__)
 class LineToTextPipeline(Pipeline):
     """Run OCR on line-level images and compute accuracy metrics."""
 
-    def __init__(self, data_importer: DataImporter, model: OCRModel) -> None:
+    def __init__(
+        self,
+        data_importer: DataImporter,
+        model: OCRModel,
+        preprocessor: Optional[ImagePreprocessor] = None,
+    ) -> None:
         self._data_importer = data_importer
         self._model = model
+        self._preprocessor = preprocessor
 
     def get_name(self) -> str:
         return "line_to_text"
@@ -37,18 +42,29 @@ class LineToTextPipeline(Pipeline):
 
         total_cer = 0.0
         total_wer = 0.0
+        predictions = []
 
         for index, (image_path, ground_truth) in enumerate(samples, start=1):
             logger.info("Processing sample %s/%s: %s", index, num_samples, image_path)
 
             try:
-                prediction = self._model.predict(image_path)
+                if self._preprocessor is not None:
+                    preprocessed_image = self._preprocessor.preprocess(image_path)
+                    prediction = self._model.predict(preprocessed_image)
+                else:
+                    prediction = self._model.predict(image_path)
 
                 cer = calculate_cer(ground_truth, prediction)
                 wer = calculate_wer(ground_truth, prediction)
 
                 total_cer += cer
                 total_wer += wer
+
+                # Collect predictions for MLflow logging
+                predictions.append({
+                    "ground_truth": ground_truth,
+                    "prediction": prediction,
+                })
 
                 logger.info("Sample %s - CER: %.4f, WER: %.4f", index, cer, wer)
                 logger.info("Ground truth: '%s'", ground_truth)
@@ -71,4 +87,5 @@ class LineToTextPipeline(Pipeline):
             "final_cer": final_cer,
             "final_wer": final_wer,
             "dataset_info": dataset_info,
+            "predictions": predictions,
         }

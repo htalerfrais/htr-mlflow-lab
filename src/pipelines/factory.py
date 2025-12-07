@@ -1,5 +1,3 @@
-"""Factory for creating pipeline instances."""
-
 from __future__ import annotations
 
 from typing import Dict, Type
@@ -8,6 +6,7 @@ from src.data.importer_factory import DataImporterFactory
 from src.models.factory import ModelFactory
 from src.pipelines.base import Pipeline
 from src.pipelines.line_to_text import LineToTextPipeline
+from src.pre_processing.factory import PreprocessorFactory
 
 
 class PipelineFactory:
@@ -37,16 +36,21 @@ class PipelineFactory:
         if not isinstance(model_name, str):
             raise ValueError("Configuration must include a 'model' name")
 
-        model_params = config.get("params")
-        if model_params is not None and not isinstance(model_params, dict):
-            raise ValueError("Configuration field 'params' must be a dictionary if provided")
-
+        # si jamais on veut ajouter de la précision sur les données à utiliser depuis fichier de config
         importer_params = config.get("importer")
         if importer_params is not None and not isinstance(importer_params, dict):
             raise ValueError("Configuration field 'importer' must be a dictionary if provided")
 
         data_importer = DataImporterFactory.create(dataset_name, **(importer_params or {}))
-        model = ModelFactory.create(model_name, model_params)
+        model = ModelFactory.create(model_name)
 
-        return pipeline_class(data_importer=data_importer, model=model)
+        # Create preprocessor if configured
+        preprocessor_config = config.get("preprocessor")
+        preprocessor = PreprocessorFactory.create(preprocessor_config)
+
+        return pipeline_class(
+            data_importer=data_importer,
+            model=model,
+            preprocessor=preprocessor,
+        )
 

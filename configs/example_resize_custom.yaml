@@ -1,0 +1,9 @@
+experiment_name: "CRNNs and image preprocess"
+run_name: "pytorch-crnn-custom-height"
+pipeline: "line_to_text"
+dataset: "local_lines"
+model: "crnn"
+preprocessor:
+  name: "resize"
+  height: 32
+

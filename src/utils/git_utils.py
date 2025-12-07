@@ -1,4 +1,3 @@
-# src/utils/git_utils.py
 import subprocess
 import logging
 

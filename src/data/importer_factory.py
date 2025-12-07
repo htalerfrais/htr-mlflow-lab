@@ -1,5 +1,3 @@
-"""Factory for creating data importer instances."""
-
 from __future__ import annotations
 
 from typing import Dict, Type
@@ -12,19 +10,10 @@ from src.data.local_importer import LocalLineImporter
 class DataImporterFactory:
     """Instantiate data importers based on configuration names."""
 
-    _registry: Dict[str, Type[DataImporter]] = {}
-
-    # Pre-register built-in importers
-    for _name in ("teklia/iam-line", "iam", "iam-line"):
-        _registry[_name] = IAMLineImporter
-    for _name in ("local_lines", "local-line-dataset"):
-        _registry[_name] = LocalLineImporter
-
-    @classmethod
-    def register(cls, name: str, importer_class: Type[DataImporter]) -> None:
-        """Register a new data importer under the given name."""
-
-        cls._registry[name.lower()] = importer_class
+    _registry: Dict[str, Type[DataImporter]] = {
+        "teklia/iam-line": IAMLineImporter,
+        "local_lines": LocalLineImporter,
+    }
 
     @classmethod
     def create(cls, dataset_name: str, **kwargs) -> DataImporter:

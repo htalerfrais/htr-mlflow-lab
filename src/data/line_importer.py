@@ -1,5 +1,4 @@
-# src/data_importers/line_importer.py
-"""IAM dataset importer implementation."""
+from __future__ import annotations
 
 import logging
 import os

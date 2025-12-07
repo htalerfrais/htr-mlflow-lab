@@ -1,5 +1,7 @@
 # Data folder - contains datasets that should not be committed
 /data/
+/data_local/
+/models_local/
 /local_test_md/
 
 # Environment variables (contains secrets)
@@ -7,34 +9,18 @@
 .env.local
 .venv
 
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+
 
 # MLflow
 mlruns/
 
 # IDE
 .vscode/
+.cursor/
 .idea/
 *.swp
 *.swo

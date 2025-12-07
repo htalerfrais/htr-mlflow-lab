@@ -1,5 +1,3 @@
-"""Local dataset importer for line-level images and ground truth."""
-
 from __future__ import annotations
 
 import json
@@ -18,9 +16,9 @@ class LocalLineImporter(DataImporter):
 
     def __init__(
         self,
-        images_dir: str,
-        ground_truth_path: str,
-        image_template: str = "line_{id}.jpg",
+          images_dir: str = "data_local/pero_dataset/dataset_test_1/lines_test_1_10first",
+          ground_truth_path: str = "data_local/pero_dataset/dataset_test_1/gt_test_1_10first.json",
+          image_template: str = "line_{id}.jpg"
     ) -> None:
         self._images_dir = images_dir
         self._ground_truth_path = ground_truth_path
@@ -46,9 +44,9 @@ class LocalLineImporter(DataImporter):
             if identifier is None or ground_truth is None:
                 logger.warning("Skipping malformed entry without 'id' or 'ground_truth': %s", entry)
                 continue
-
-            image_name = self._image_template.format(id=identifier)
-            image_path = os.path.join(self._images_dir, image_name)
+            
+            image_name = self._image_template.format(id=identifier) #associate the right line image to the gt text
+            image_path = os.path.join(self._images_dir, image_name) 
 
             if not os.path.exists(image_path):
                 missing_images.append(image_path)

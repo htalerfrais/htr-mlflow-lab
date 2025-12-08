@@ -6,4 +6,3 @@ model: "trocr"
 preprocessor:
   name: "resize"
   height: 64
-  

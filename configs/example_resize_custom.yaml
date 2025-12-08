@@ -6,4 +6,3 @@ model: "crnn"
 preprocessor:
   name: "resize"
   height: 32
-

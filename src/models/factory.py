@@ -7,6 +7,7 @@ from src.models.onnx_model import ONNXModel
 from src.models.tesseract_model import TesseractModel
 from src.models.trocr_model import TrOCRModel
 from src.models.crnn_model import CRNNModel
+from src.models.crnn_f_model import CRNNFModel
 
 
 class ModelFactory:
@@ -17,6 +18,7 @@ class ModelFactory:
         "trocr": TrOCRModel,
         "onnx": ONNXModel,
         "crnn": CRNNModel,
+        "crnn_f": CRNNFModel,
     }
 
     @classmethod

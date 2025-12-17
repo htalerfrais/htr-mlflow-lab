@@ -1,0 +1,9 @@
+experiment_name: "CRNN-F on Personal Lines"
+run_name: "crnn-f-persolines-preprocessing"
+pipeline: "line_to_text"
+dataset: "local_lines"
+model: "crnn_f"
+preprocessor: 
+  name: "resize"
+  height: 48
+

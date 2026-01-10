@@ -23,10 +23,27 @@ class TrOCRFrModel(OCRModel):
         self._max_new_tokens = max_new_tokens
 
         self._processor = TrOCRProcessor.from_pretrained(processor_name)
-        self._model = VisionEncoderDecoderModel.from_pretrained(model_name)
+        self._model = VisionEncoderDecoderModel.from_pretrained(
+            model_name,
+            use_safetensors=False,  # Use pytorch_model.bin, ignore safetensors
+        )
         self._tokenizer = AutoTokenizer.from_pretrained(model_name)
         self._model.to(self._device)
         self._model.eval()
+        
+        # Force complete model loading by accessing all parameters
+        # This ensures no lazy loading happens during inference
+        _ = list(self._model.parameters())
+        
+        # Warmup: trigger any remaining lazy loading with a dummy forward pass
+        # This ensures the model is fully loaded before real inference starts
+        with torch.no_grad():
+            dummy_input = torch.zeros((1, 3, 384, 384), device=self._device)
+            try:
+                _ = self._model.generate(dummy_input, max_length=10)
+            except Exception:
+                # If warmup fails, it's okay - model will load during first real inference
+                pass
 
     def predict(self, image: ImageInput) -> str:
         """

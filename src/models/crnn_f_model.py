@@ -178,7 +178,7 @@ class CRNNFModel(OCRModel):
 
     def _decode_prediction(self, output: torch.Tensor) -> list:
         """
-        CTC greedy decoding for (B, T, C) format.
+        CTC greedy decoding for (B, T, C) format (format of the output tensor of the model)
 
         Args:
             output: (batch, T, n_classes) log-softmax scores

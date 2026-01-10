@@ -2,6 +2,9 @@
 /data_local/
 /models_local/
 
+# Scripts imports - contains scripts we do not commit, have to be downloaded manually
+/scripts-imports/
+
 # Environment variables
 .env
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import glob
 import json
 import logging
 import os
@@ -16,9 +17,9 @@ class LocalLineImporter(DataImporter):
 
     def __init__(
         self,
-          images_dir: str = "data_local/pero_dataset/dataset_test_1/lines_test_1_10first",
-          ground_truth_path: str = "data_local/pero_dataset/dataset_test_1/gt_test_1_10first.json",
-          image_template: str = "line_{id}.jpg"
+          images_dir: str = "data_local/perso_dataset/hector_pages_lines_1/lines_out",
+          ground_truth_path: str = "data_local/perso_dataset/hector_pages_lines_1/gt_hector_pages_lines_reindexee.json",
+          image_template: str = "page_*_line_{id:04d}.png"
     ) -> None:
         self._images_dir = images_dir
         self._ground_truth_path = ground_truth_path
@@ -45,13 +46,27 @@ class LocalLineImporter(DataImporter):
                 logger.warning("Skipping malformed entry without 'id' or 'ground_truth': %s", entry)
                 continue
             
-            image_name = self._image_template.format(id=identifier) #associate the right line image to the gt text
-            image_path = os.path.join(self._images_dir, image_name) 
-
-            if not os.path.exists(image_path):
-                missing_images.append(image_path)
+            # Format the pattern to search for images (e.g., "page_*_line_0002.png")
+            image_pattern = self._image_template.format(id=identifier)
+            image_path_pattern = os.path.join(self._images_dir, image_pattern)
+            
+            # Use glob to find matching image files (handles page_*_line_XXXX.png pattern)
+            matching_images = glob.glob(image_path_pattern)
+            
+            if not matching_images:
+                missing_images.append(image_path_pattern)
                 continue
-
+            
+            if len(matching_images) > 1:
+                logger.warning(
+                    "Multiple images found for id %s: %s. Using the first one: %s",
+                    identifier,
+                    matching_images,
+                    matching_images[0]
+                )
+            
+            # Use the first matching image
+            image_path = matching_images[0]
             samples.append((image_path, ground_truth))
 
         if missing_images:

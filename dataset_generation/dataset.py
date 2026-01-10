@@ -2,19 +2,18 @@ import cv2
 import numpy as np
 import glob
 import os
-import zipfile
 from PIL import Image
 
 
 # ================= CONFIG =================
-IMAGE_GLOB = "../data_local/perso_dataset/hector_pages_lines_1/raw_pages/*.jpg"
-OUT_DIR = "../data_local/perso_dataset/hector_pages_lines_1/lines_out"
-ZIP_NAME = "../data_local/perso_dataset/hector_pages_lines_1/lines_dataset.zip"
+IMAGE_GLOB = "../data_local/perso_dataset/hector_pages_lines_2/raw_pages/*.jpeg"
+OUT_DIR = "../data_local/perso_dataset/hector_pages_lines_2/lines_out"
 
 CANVAS_H = 128
-VERT_MARGIN = 20
-HORZ_MARGIN = 120
-MIN_LINE_HEIGHT = 10
+VERT_MARGIN = 110
+HORZ_MARGIN = 110
+MIN_LINE_HEIGHT = 15
+MIN_BLACK_PIXELS = 50  # Nombre minimum de pixels noirs requis pour qu'une ligne soit valide
 SIDE_CROP_RATIO = 0   # hard remove paper edges
 
 
@@ -122,7 +121,7 @@ for img_path in images:
         line = bw[y1:y2, :]
 
         ys, xs = np.where(line == 0)
-        if len(xs) < 20:
+        if len(xs) < MIN_BLACK_PIXELS:
             continue
 
         x1 = max(0, xs.min() - HORZ_MARGIN)
@@ -131,14 +130,9 @@ for img_path in images:
 
         line = to_canvas(line, CANVAS_H)
 
-        out_name = f"{name}_line_{global_line_id:04d}.png"
+        out_name = f"{name}_line_{global_line_id:04d}.jpg"
         cv2.imwrite(os.path.join(OUT_DIR, out_name), line)
         global_line_id += 1
 
 
-# ================= ZIP EVERYTHING =================
-with zipfile.ZipFile(ZIP_NAME, "w", zipfile.ZIP_DEFLATED) as z:
-    for f in os.listdir(OUT_DIR):
-        z.write(os.path.join(OUT_DIR, f), f)
-
-print(f"✅ Saved {global_line_id} lines into {ZIP_NAME}")
+print(f"✅ Saved {global_line_id} lines into {OUT_DIR}")

@@ -5,6 +5,7 @@ from typing import Dict, Type
 from src.data.base import DataImporter
 from src.data.line_importer import IAMLineImporter
 from src.data.local_importer import LocalLineImporter
+from src.data.rimes_importer import RIMESLineImporter
 
 
 class DataImporterFactory:
@@ -12,6 +13,7 @@ class DataImporterFactory:
 
     _registry: Dict[str, Type[DataImporter]] = {
         "teklia/iam-line": IAMLineImporter,
+        "teklia/rimes-line": RIMESLineImporter,
         "local_lines": LocalLineImporter,
     }
 

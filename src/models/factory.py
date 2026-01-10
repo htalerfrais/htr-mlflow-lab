@@ -24,7 +24,7 @@ class ModelFactory:
     @classmethod
     def create(cls, model_name: str) -> OCRModel:
         """Create a model instance for the provided model name using sensible defaults."""
-
+        
         model_class = cls._registry.get(model_name.lower())
         if model_class is None:
             available = ", ".join(sorted(cls._registry.keys())) or "<none>"

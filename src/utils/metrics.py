@@ -11,7 +11,10 @@ def calculate_cer(reference: str, hypothesis: str) -> float:
         return 1.0 if len(hyp) > 0 else 0.0
     
     # Calculate CER using Levenshtein distance
-    return Levenshtein.distance(ref, hyp) / len(ref)
+    # cap distance so that we don't get CER > 1
+    distance = Levenshtein.distance(ref, hyp)
+    capped_distance = min(distance, len(ref))
+    return capped_distance / len(ref)
 
 
 def calculate_wer(reference: str, hypothesis: str) -> float:
@@ -27,4 +30,7 @@ def calculate_wer(reference: str, hypothesis: str) -> float:
         return 1.0 if len(hyp_words) > 0 else 0.0
     
     # Calculate WER using Levenshtein distance on word lists
-    return Levenshtein.distance(ref_words, hyp_words) / len(ref_words)
+    # cap distance so that we don't get WER > 1
+    distance = Levenshtein.distance(ref_words, hyp_words)
+    capped_distance = min(distance, len(ref_words))
+    return capped_distance / len(ref_words)

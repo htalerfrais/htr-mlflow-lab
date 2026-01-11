@@ -17,9 +17,9 @@ class LocalLineImporter(DataImporter):
 
     def __init__(
         self,
-          images_dir: str = "data_local/perso_dataset/hector_pages_lines_1/lines_out",
-          ground_truth_path: str = "data_local/perso_dataset/hector_pages_lines_1/gt_hector_pages_lines_reindexee.json",
-          image_template: str = "page_*_line_{id:04d}.png"
+          images_dir: str = "data_local/perso_dataset/hector_pages_lines_2/lines_out_sorted",
+          ground_truth_path: str = "data_local/perso_dataset/hector_pages_lines_2/gt_hector_pages_lines.json",
+          image_template: str = "page_*_line_{id:04d}.jpg"
     ) -> None:
         self._images_dir = images_dir
         self._ground_truth_path = ground_truth_path

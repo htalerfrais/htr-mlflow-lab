@@ -1,11 +1,11 @@
 experiment_name: "Hector dataset free height"
-run_name: "TrOCR-FR free height"
+run_name: "CRNN-F free height"
 pipeline: "line_to_text"
 dataset:
   name: "local_lines"
   images_dir: "data_local/perso_dataset/hector_pages_lines_3/lines_out_sorted"
   ground_truth_path: "data_local/perso_dataset/hector_pages_lines_3/gt_hector_pages_lines.json"
-model: "trocr_fr"
+model: "crnn_f"
 preprocessor: 
   - name: "binarize"
 

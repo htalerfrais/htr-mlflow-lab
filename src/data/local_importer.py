@@ -17,10 +17,14 @@ class LocalLineImporter(DataImporter):
 
     def __init__(
         self,
-          images_dir: str = "data_local/perso_dataset/hector_pages_lines_2/lines_out_sorted",
-          ground_truth_path: str = "data_local/perso_dataset/hector_pages_lines_2/gt_hector_pages_lines.json",
+          images_dir: str | None = None,
+          ground_truth_path: str | None = None,
           image_template: str = "page_*_line_{id:04d}.jpg"
     ) -> None:
+        if images_dir is None:
+            raise ValueError("'images_dir' must be provided in the configuration")
+        if ground_truth_path is None:
+            raise ValueError("'ground_truth_path' must be provided in the configuration")
         self._images_dir = images_dir
         self._ground_truth_path = ground_truth_path
         self._image_template = image_template

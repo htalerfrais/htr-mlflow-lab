@@ -1,0 +1,11 @@
+experiment_name: "Hector dataset good resolution measures"
+run_name: "TrOCR-FR measures"
+pipeline: "line_to_text"
+dataset: "local_lines"
+model: "trocr_fr"
+preprocessor: 
+  - name: "resize"
+    height: 256
+  - name: "binarize"
+
+

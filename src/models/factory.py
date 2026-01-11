@@ -3,10 +3,9 @@ from __future__ import annotations
 from typing import Dict, Type
 
 from src.models.base import OCRModel
-from src.models.onnx_model import ONNXModel
 from src.models.tesseract_model import TesseractModel
 from src.models.trocr_model import TrOCRModel
-from src.models.crnn_model import CRNNModel
+from src.models.trocr_fr_model import TrOCRFrModel
 from src.models.crnn_f_model import CRNNFModel
 
 
@@ -16,8 +15,7 @@ class ModelFactory:
     _registry: Dict[str, Type[OCRModel]] = {
         "tesseract": TesseractModel,
         "trocr": TrOCRModel,
-        "onnx": ONNXModel,
-        "crnn": CRNNModel,
+        "trocr_fr": TrOCRFrModel,
         "crnn_f": CRNNFModel,
     }
 

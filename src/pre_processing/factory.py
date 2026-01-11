@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Dict, Type, List, Union, Optional
 
 from src.pre_processing.base import ImagePreprocessor
+from src.pre_processing.binarize import BinarizePreprocessor
 from src.pre_processing.identity import IdentityPreprocessor
 from src.pre_processing.resize import ResizePreprocessor
 from src.pre_processing.sequential import SequentialPreprocessor
@@ -16,8 +17,8 @@ class PreprocessorFactory:
     _registry: Dict[str, Type[ImagePreprocessor]] = {
         "identity": IdentityPreprocessor,
         "resize": ResizePreprocessor,
+        "binarize": BinarizePreprocessor,
         # Future preprocessors can be added here:
-        # "binary": BinaryPreprocessor,
         # "crop": CropPreprocessor,
     }
 

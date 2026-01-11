@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import glob
 import os
+import re
 from PIL import Image
 
 
@@ -68,23 +69,21 @@ counter = 0
 global_line_id = 0
 
 images = list(glob.glob(IMAGE_GLOB))
+# Trier les images par numéro de page pour garantir l'ordre
+def get_page_number(img_path):
+    match = re.search(r'page_(\d+)', os.path.basename(img_path))
+    return int(match.group(1)) if match else 0
+images.sort(key=get_page_number)
 print(f"Found {len(images)} images matching '{IMAGE_GLOB}'")
 
 for img_path in images:
     name = os.path.splitext(os.path.basename(img_path))[0]
-    absolute_path = os.path.abspath(img_path)
-
-    absolute_path = absolute_path.replace("\\", "/")
-    print(f"Processing {absolute_path}")
-    if not os.path.exists(absolute_path):
-        print(f"⚠️  File does not exist: {absolute_path}, skipping...")
-        continue
-    print(f"Image exists: {absolute_path}")
+    print(f"Processing {img_path}")
 
     try:
-        gray = np.array(Image.open(absolute_path).convert('L'))
+        gray = np.array(Image.open(img_path).convert('L'))
     except Exception as e:
-        print(f"⚠️  Failed to read {absolute_path}: {e}")
+        print(f"⚠️  Failed to read {img_path}: {e}")
         continue
 
     # -------- SHADOW REMOVAL --------

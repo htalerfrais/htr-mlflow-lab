@@ -5,6 +5,7 @@ dataset: "local_lines"
 model: "trocr_fr"
 preprocessor: 
   - name: "resize"
-    height: 128
+    height: 256
   - name: "binarize"
+
 

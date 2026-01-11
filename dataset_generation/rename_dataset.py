@@ -5,9 +5,11 @@ import shutil
 from pathlib import Path
 
 # ================= CONFIG =================
-JSON_PATH = "../data_local/perso_dataset/hector_pages_lines_2/gt_hector_pages_lines.json"
-IMAGES_DIR = "../data_local/perso_dataset/hector_pages_lines_2/lines_out"
-OUTPUT_DIR = "../data_local/perso_dataset/hector_pages_lines_2/lines_out_sorted"
+DATASET_FOLDER = "hector_pages_lines_3"
+
+JSON_PATH = f"../data_local/perso_dataset/{DATASET_FOLDER}/gt_hector_pages_lines.json"
+IMAGES_DIR = f"../data_local/perso_dataset/{DATASET_FOLDER}/lines_out"
+OUTPUT_DIR = f"../data_local/perso_dataset/{DATASET_FOLDER}/lines_out_sorted"
 OUTPUT_LINE_NUMBER_FORMAT = "04d"  # Format du numéro de ligne (04d = 4 chiffres avec zéros)
 OUTPUT_FILE_EXTENSION = ".jpg"
 

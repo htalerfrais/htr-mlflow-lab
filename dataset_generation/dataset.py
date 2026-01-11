@@ -7,11 +7,14 @@ from PIL import Image
 
 
 # ================= CONFIG =================
-IMAGE_GLOB = "../data_local/perso_dataset/hector_pages_lines_2/raw_pages/*.jpeg"
-OUT_DIR = "../data_local/perso_dataset/hector_pages_lines_2/lines_out"
+DATASET_FOLDER = "hector_pages_lines_3"
+
+IMAGE_GLOB = f"../data_local/perso_dataset/{DATASET_FOLDER}/raw_pages/*.jpeg"
+OUT_DIR = f"../data_local/perso_dataset/{DATASET_FOLDER}/lines_out"
 
 # Canvas settings
 CANVAS_H = 128
+USE_FIXED_HEIGHT = False  # Activer/désactiver le redimensionnement à hauteur fixe
 CANVAS_BACKGROUND = 255  # Valeur du blanc dans le canvas
 
 # Margins
@@ -133,7 +136,8 @@ for img_path in images:
         x2 = min(line.shape[1], xs.max() + HORZ_MARGIN)
         line = line[:, x1:x2]
 
-        line = to_canvas(line, CANVAS_H)
+        if USE_FIXED_HEIGHT:
+            line = to_canvas(line, CANVAS_H)
 
         out_name = f"{name}_line_{global_line_id:{OUTPUT_LINE_NUMBER_FORMAT}}{OUTPUT_FILE_EXTENSION}"
         cv2.imwrite(os.path.join(OUT_DIR, out_name), line)

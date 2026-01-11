@@ -28,20 +28,24 @@ class PipelineFactory:
                 f"Unknown pipeline '{pipeline_name}'. Available pipelines: {available}"
             )
 
-        dataset_name = config.get("dataset")
-        if not isinstance(dataset_name, str):
-            raise ValueError("Configuration must include a 'dataset' name")
+        dataset_config = config.get("dataset")
+
+        if isinstance(dataset_config, str):
+            dataset_name = dataset_config
+            dataset_params = {}
+        elif isinstance(dataset_config, dict):
+            dataset_name = dataset_config.get("name")
+            if not isinstance(dataset_name, str):
+                raise ValueError("Dataset configuration must include a 'name' field")
+            dataset_params = {k: v for k, v in dataset_config.items() if k != "name"}
+        else:
+            raise ValueError("Configuration must include a 'dataset' name or dictionary")
 
         model_name = config.get("model")
         if not isinstance(model_name, str):
             raise ValueError("Configuration must include a 'model' name")
 
-        # si jamais on veut ajouter de la précision sur les données à utiliser depuis fichier de config
-        importer_params = config.get("importer")
-        if importer_params is not None and not isinstance(importer_params, dict):
-            raise ValueError("Configuration field 'importer' must be a dictionary if provided")
-
-        data_importer = DataImporterFactory.create(dataset_name, **(importer_params or {}))
+        data_importer = DataImporterFactory.create(dataset_name, **(dataset_params or {}))
         model = ModelFactory.create(model_name)
 
         # Create preprocessor if configured

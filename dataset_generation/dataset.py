@@ -65,8 +65,7 @@ def to_canvas(img, H=None):
 
 
 # ================= MAIN LOOP =================
-counter = 0
-global_line_id = 0
+global_line_id = 1
 
 images = list(glob.glob(IMAGE_GLOB))
 # Trier les images par numéro de page pour garantir l'ordre

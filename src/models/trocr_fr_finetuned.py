@@ -43,7 +43,7 @@ class TrOCRFrFinetunedModel(OCRModel):
 
         with torch.no_grad():
             generated_ids = self._model.generate(
-                pixel_values,
+                pixel_values=pixel_values,
                 max_new_tokens=self._max_new_tokens,
             )
 

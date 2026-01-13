@@ -6,6 +6,7 @@ from src.models.base import OCRModel
 from src.models.tesseract_model import TesseractModel
 from src.models.trocr_model import TrOCRModel
 from src.models.trocr_fr_model import TrOCRFrModel
+from src.models.trocr_fr_finetuned import TrOCRFrFinetunedModel
 from src.models.crnn_f_model import CRNNFModel
 
 
@@ -16,6 +17,7 @@ class ModelFactory:
         "tesseract": TesseractModel,
         "trocr": TrOCRModel,
         "trocr_fr": TrOCRFrModel,
+        "trocr_fr_finetuned": TrOCRFrFinetunedModel,
         "crnn_f": CRNNFModel,
     }
 

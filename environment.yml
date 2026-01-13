@@ -15,6 +15,7 @@ dependencies:
       - python-Levenshtein
       - pillow
       - transformers
+      - peft
       - pandas
       - matplotlib
       - boto3

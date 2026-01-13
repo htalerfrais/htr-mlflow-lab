@@ -19,6 +19,8 @@ from transformers import (
     VisionEncoderDecoderModel,
 )
 
+from peft import LoraConfig, TaskType, get_peft_model
+
 from src.data.local_importer import LocalLineImporter
 from src.utils.metrics import calculate_cer
 
@@ -142,8 +144,8 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("models/trocr-fr-finetuned"),
-        help="Directory where Hugging Face checkpoints will be saved.",
+        default=Path("models_local/finetuned/adapters"),
+        help="Directory where LoRA adapters will be saved.",
     )
     parser.add_argument("--train-ratio", type=float, default=0.9, help="Proportion of samples used for training.")
     parser.add_argument("--per-device-train-batch-size", type=int, default=4)
@@ -154,6 +156,9 @@ def main() -> None:
     parser.add_argument("--logging-steps", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--fp16", action="store_true", help="Enable mixed precision training.")
+    parser.add_argument("--lora-r", type=int, default=16, help="LoRA rank.")
+    parser.add_argument("--lora-alpha", type=int, default=32, help="LoRA alpha (scaling).")
+    parser.add_argument("--lora-dropout", type=float, default=0.1, help="LoRA dropout rate.")
 
     args = parser.parse_args()
 
@@ -179,6 +184,16 @@ def main() -> None:
 
     processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
     model = VisionEncoderDecoderModel.from_pretrained("agomberto/trocr-large-handwritten-fr")
+    lora_config = LoraConfig(
+        r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],
+        lora_dropout=args.lora_dropout,
+        bias="none",
+        task_type=TaskType.SEQ_2_SEQ_LM,
+    )
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
     tokenizer = AutoTokenizer.from_pretrained("agomberto/trocr-large-handwritten-fr")
 
     if tokenizer.pad_token_id is None:
@@ -205,7 +220,7 @@ def main() -> None:
 
     training_args = Seq2SeqTrainingArguments(
         output_dir=str(output_dir),
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         logging_strategy="steps",
         logging_steps=args.logging_steps,
@@ -231,7 +246,9 @@ def main() -> None:
     )
 
     trainer.train()
-    trainer.save_model(output_dir)
+    model.save_pretrained(output_dir)
+    tokenizer.save_pretrained(output_dir)
+    processor.save_pretrained(output_dir)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
-experiment_name: "Hector dataset test - TrOCR FR LoRA"
-run_name: "TrOCR-FR LoRA (local adapters) - hector_pages_lines_3_test"
+experiment_name: "Hector dataset de test (30 lines)"
+run_name: "TrOCR-FR LoRA (6 epochs)"
 pipeline: "line_to_text"
 dataset:
   name: "local_lines"
@@ -8,4 +8,3 @@ dataset:
 model: "trocr_fr_finetuned"
 preprocessor:
   - name: "binarize"
-

@@ -7,7 +7,7 @@ from PIL import Image
 
 
 # ================= CONFIG =================
-DATASET_FOLDER = "hector_pages_lines_3"
+DATASET_FOLDER = "hector_pages_lines_3.2"
 
 IMAGE_GLOB = f"../data_local/perso_dataset/{DATASET_FOLDER}/raw_pages/*.jpeg"
 OUT_DIR = f"../data_local/perso_dataset/{DATASET_FOLDER}/lines_out"

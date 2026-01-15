@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 # ================= CONFIG =================
-DATASET_FOLDER = "hector_pages_lines_3"
+DATASET_FOLDER = "hector_pages_lines_3.2"
 
 JSON_PATH = f"../data_local/perso_dataset/{DATASET_FOLDER}/gt_hector_pages_lines.json"
 IMAGES_DIR = f"../data_local/perso_dataset/{DATASET_FOLDER}/lines_out"

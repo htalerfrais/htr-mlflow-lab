@@ -41,12 +41,21 @@ class PipelineFactory:
         else:
             raise ValueError("Configuration must include a 'dataset' name or dictionary")
 
-        model_name = config.get("model")
+        model_config = config.get("model")
+        if not isinstance(model_config, dict):
+            raise ValueError(
+                "Configuration must include a 'model' dictionary with a 'name' field "
+                "(e.g. model: {name: trocr_fr_finetuned, mlflow_run_id: ...})."
+            )
+
+        model_name = model_config.get("name")
         if not isinstance(model_name, str):
-            raise ValueError("Configuration must include a 'model' name")
+            raise ValueError("Model configuration must include a 'name' field")
+
+        model_params = {k: v for k, v in model_config.items() if k != "name"}
 
         data_importer = DataImporterFactory.create(dataset_name, **(dataset_params or {}))
-        model = ModelFactory.create(model_name)
+        model = ModelFactory.create(model_name, **model_params)
 
         # Create preprocessor if configured
         preprocessor_config = config.get("preprocessor")

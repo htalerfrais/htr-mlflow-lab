@@ -3,26 +3,34 @@ from __future__ import annotations
 import argparse
 import logging
 import random
+import os
+import importlib.util
 from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
 import torch
+import mlflow
 from PIL import Image
 from torch.utils.data import Dataset
 from transformers import (
     AutoTokenizer,
     EvalPrediction,
+    EarlyStoppingCallback,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
+    TrainerCallback,
     TrOCRProcessor,
     VisionEncoderDecoderModel,
 )
+from transformers.integrations import MLflowCallback
 
 from peft import LoraConfig, TaskType, get_peft_model
 
 from src.data.local_importer import LocalLineImporter
 from src.utils.metrics import calculate_cer
+
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -145,7 +153,7 @@ def main() -> None:
         "--output-dir",
         type=Path,
         default=Path("models_local/finetuned/adapters"),
-        help="Directory where LoRA adapters will be saved.",
+        help="Base directory for outputs (checkpoints, adapters, logs).",
     )
     parser.add_argument("--train-ratio", type=float, default=0.9, help="Proportion of samples used for training.")
     parser.add_argument("--per-device-train-batch-size", type=int, default=4)
@@ -159,8 +167,24 @@ def main() -> None:
     parser.add_argument("--lora-r", type=int, default=16, help="LoRA rank.")
     parser.add_argument("--lora-alpha", type=int, default=32, help="LoRA alpha (scaling).")
     parser.add_argument("--lora-dropout", type=float, default=0.1, help="LoRA dropout rate.")
+    parser.add_argument(
+        "--mlflow-tracking-uri",
+        type=str,
+        default=None,
+        help="MLflow tracking URI. If omitted, uses MLFLOW_TRACKING_URI from .env/.environment.",
+    )
+    parser.add_argument(
+        "--mlflow-experiment-name",
+        type=str,
+        required=True,
+        help="MLflow experiment name to use for fine-tuning runs.",
+    )
 
     args = parser.parse_args()
+
+    # Load env vars from project root .env (if present), without forcing users to pass secrets via CLI.
+    project_root = Path(__file__).resolve().parents[2]
+    load_dotenv(project_root / ".env")
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -168,6 +192,22 @@ def main() -> None:
     images_dir = args.images_dir.expanduser().resolve()
     ground_truth_path = args.ground_truth.expanduser().resolve()
     output_dir = args.output_dir.expanduser().resolve()
+    checkpoints_dir = output_dir / "checkpoints"
+    adapters_dir = output_dir / "adapters"
+    tb_dir = output_dir / "tb"
+
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+    adapters_dir.mkdir(parents=True, exist_ok=True)
+    tb_dir.mkdir(parents=True, exist_ok=True)
+
+    mlflow_tracking_uri = args.mlflow_tracking_uri or os.getenv("MLFLOW_TRACKING_URI")
+    if not mlflow_tracking_uri:
+        raise ValueError(
+            "Missing MLflow tracking URI. Provide --mlflow-tracking-uri or set MLFLOW_TRACKING_URI in .env"
+        )
+
+    mlflow.set_tracking_uri(mlflow_tracking_uri)
+    mlflow.set_experiment(args.mlflow_experiment_name)
 
     if not images_dir.exists():
         raise FileNotFoundError(f"Images directory does not exist: {images_dir}")
@@ -218,37 +258,70 @@ def main() -> None:
 
     data_collator = TrOCRDataCollator(tokenizer)
 
+    tensorboard_available = (
+        importlib.util.find_spec("tensorboard") is not None
+        or importlib.util.find_spec("tensorboardX") is not None
+    )
+    report_to = ["tensorboard"] if tensorboard_available else []
+    if not tensorboard_available:
+        logger.warning(
+            "TensorBoard is not installed; disabling TensorBoard reporting. "
+            "Install with: pip install tensorboard"
+        )
+
     training_args = Seq2SeqTrainingArguments(
-        output_dir=str(output_dir),
+        output_dir=str(checkpoints_dir),
         eval_strategy="epoch",
         save_strategy="epoch",
         logging_strategy="steps",
         logging_steps=args.logging_steps,
+        logging_dir=str(tb_dir),
+        report_to=report_to,
         per_device_train_batch_size=args.per_device_train_batch_size,
         per_device_eval_batch_size=args.per_device_eval_batch_size,
         learning_rate=args.learning_rate,
         num_train_epochs=args.num_train_epochs,
         predict_with_generate=True,
+        generation_max_length=args.max_target_length,
+        load_best_model_at_end=True,
+        metric_for_best_model="cer",
+        greater_is_better=False,
         fp16=args.fp16,
         save_total_limit=3,
         remove_unused_columns=False,
         gradient_checkpointing=False,
     )
 
-    trainer = Seq2SeqTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        data_collator=data_collator,
-        tokenizer=tokenizer,
-        compute_metrics=compute_cer_metrics(tokenizer),
-    )
+    with mlflow.start_run():
+        trainer = Seq2SeqTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            data_collator=data_collator,
+            tokenizer=tokenizer,
+            compute_metrics=compute_cer_metrics(tokenizer),
+            callbacks=[
+                MLflowCallback(),
+                EarlyStoppingCallback(early_stopping_patience=3),
+            ],
+        )
 
-    trainer.train()
-    model.save_pretrained(output_dir)
-    tokenizer.save_pretrained(output_dir)
-    processor.save_pretrained(output_dir)
+        trainer.train()
+
+        # Save adapters locally first, then log them to MLflow (so the artifact path exists for inference).
+        model.save_pretrained(adapters_dir)
+        tokenizer.save_pretrained(adapters_dir)
+        processor.save_pretrained(adapters_dir)
+
+        if adapters_dir.exists():
+            mlflow.log_artifacts(str(adapters_dir), artifact_path="adapters")
+        if tb_dir.exists():
+            mlflow.log_artifacts(str(tb_dir), artifact_path="tensorboard")
+
+        active_run = mlflow.active_run()
+        if active_run is not None:
+            logger.info("MLflow run_id: %s", active_run.info.run_id)
 
 
 if __name__ == "__main__":

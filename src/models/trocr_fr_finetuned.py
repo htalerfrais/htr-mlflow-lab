@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import mlflow
 import torch
 from PIL import Image
 from peft import PeftModel
 from transformers import AutoTokenizer, TrOCRProcessor, VisionEncoderDecoderModel
+from mlflow.tracking import MlflowClient
 
 from src.models.base import OCRModel, ImageInput
 
@@ -15,13 +17,35 @@ class TrOCRFrFinetunedModel(OCRModel):
 
     def __init__(
         self,
-        adapters_dir: Path | str = Path("models_local/finetuned/adapters"),
+        mlflow_run_id: str,
+        mlflow_tracking_uri: str | None = None,
         device: str | None = None,
         max_new_tokens: int = 256,
     ) -> None:
         self._device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self._adapters_dir = Path(adapters_dir)
+        self._mlflow_run_id = mlflow_run_id
         self._max_new_tokens = max_new_tokens
+
+        if mlflow_tracking_uri is not None:
+            mlflow.set_tracking_uri(mlflow_tracking_uri)
+
+        try:
+            downloaded_dir = mlflow.artifacts.download_artifacts(
+                artifact_uri=f"runs:/{self._mlflow_run_id}/adapters"
+            )
+        except Exception as exc:
+            # Provide a more actionable error by listing available artifact paths.
+            client = MlflowClient()
+            root_items = client.list_artifacts(self._mlflow_run_id, path="")
+            available = sorted({item.path for item in root_items})
+            raise RuntimeError(
+                "Failed to download MLflow artifacts at path 'adapters'. "
+                f"Run_id={self._mlflow_run_id}. "
+                f"Available artifact root paths: {available}. "
+                "This usually means the fine-tuning run didn't log the adapters. "
+                "Re-run fine-tuning and ensure it logs artifacts under 'adapters/'."
+            ) from exc
+        self._adapters_dir = Path(downloaded_dir)
 
         base_model = VisionEncoderDecoderModel.from_pretrained(
             "agomberto/trocr-large-handwritten-fr"
@@ -51,4 +75,5 @@ class TrOCRFrFinetunedModel(OCRModel):
         return text.strip()
 
     def get_name(self) -> str:
-        return "TrOCR-FR (LoRA)"
+        short_run = self._mlflow_run_id[:8]
+        return f"TrOCR-FR (LoRA, mlflow_run={short_run})"

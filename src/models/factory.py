@@ -22,15 +22,15 @@ class ModelFactory:
     }
 
     @classmethod
-    def create(cls, model_name: str) -> OCRModel:
-        """Create a model instance for the provided model name using sensible defaults."""
+    def create(cls, model_name: str, **model_params) -> OCRModel:
+        """Create a model instance for the provided model name."""
         
         model_class = cls._registry.get(model_name.lower())
         if model_class is None:
             available = ", ".join(sorted(cls._registry.keys())) or "<none>"
             raise ValueError(f"Unknown model '{model_name}'. Available models: {available}")
 
-        return model_class()
+        return model_class(**model_params)
 
     # a rendre plus dynamique en utilisant les arguments du fichier de config
     # on utilise des arguments plus précis de la liste de config des qu'on veut comparer des resultats obtenus avec des paramètres différents pour un meme model

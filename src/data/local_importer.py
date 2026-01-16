@@ -19,7 +19,7 @@ class LocalLineImporter(DataImporter):
         self,
           images_dir: str | None = None,
           ground_truth_path: str | None = None,
-          image_template: str = "page_*_line_{id:04d}.jpg"
+          image_template: str = "*line_{id:04d}.jpg"
     ) -> None:
         if images_dir is None:
             raise ValueError("'images_dir' must be provided in the configuration")

@@ -94,7 +94,7 @@ def load_samples(images_dir: Path, ground_truth_path: Path) -> List[Tuple[str, s
     importer = LocalLineImporter(
         images_dir=str(images_dir),
         ground_truth_path=str(ground_truth_path),
-        image_template="page_*_line_{id:04d}.jpg",
+        image_template="*line_{id:04d}.jpg",
     )
     samples, dataset_info = importer.import_data()
 

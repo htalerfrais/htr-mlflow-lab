@@ -132,19 +132,22 @@ def compute_cer_metrics(tokenizer: AutoTokenizer):
     return _compute
 
 
+
+
+
 def main():
     # ===== HYPERPARAMETERS (hardcoded) =====
     # Training hyperparameters
-    per_device_train_batch_size = 4
-    per_device_eval_batch_size = 4
+    per_device_train_batch_size = 16
+    per_device_eval_batch_size = 16
     learning_rate = 1e-4 
-    num_train_epochs = 30
-    weight_decay = 0.01
+    num_train_epochs = 40
+    weight_decay = 0.0001
     warmup_ratio = 0.1     # 10% du temps pour monter en puissance
     max_target_length = 256
     logging_steps = 50
     seed = 42
-    fp16 = True 
+    fp16 = False 
     train_ratio = 0.9  
     
     # LoRA configuration
@@ -152,14 +155,14 @@ def main():
     lora_alpha = 2*lora_r
     lora_dropout = 0.1
     target_modules = [
-        "query", "key", "value",                            # Encodeur (ViT)
+        "query", "key", "value", "dense",                   # Encodeur (ViT)
         "q_proj", "k_proj", "v_proj", "out_proj",           # Décodeur (Attention)
-        "fc1", "fc2", "intermediate.dense", "output.dense"  # Couches Feed-Forward
+        "fc1", "fc2"                                        # Couches Feed-Forward
     ]
     
     # ===== PATHS AND CONFIGURATION (hardcoded) =====
-    images_dir = Path("data_local/perso_dataset/hector_pages_lines_3/lines_out_sorted")
-    ground_truth_path = Path("data_local/perso_dataset/hector_pages_lines_3/gt_hector_pages_lines.json")
+    images_dir = Path("data_local/perso_dataset/hector_pages_lines_3.2/lines_out_sorted")
+    ground_truth_path = Path("data_local/perso_dataset/hector_pages_lines_3.2/gt_hector_pages_lines.json")
     output_dir = Path("models_local/finetuned/adapters")
     mlflow_experiment_name = "trocr-fr-finetuning"  # MLflow experiment name
 
@@ -282,7 +285,7 @@ def main():
             tokenizer=tokenizer,
             compute_metrics=compute_cer_metrics(tokenizer),
             callbacks=[
-                EarlyStoppingCallback(early_stopping_patience=3),
+                # EarlyStoppingCallback(early_stopping_patience=3),
             ],
         )
 

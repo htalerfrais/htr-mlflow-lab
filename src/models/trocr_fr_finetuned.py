@@ -29,27 +29,10 @@ class TrOCRFrFinetunedModel(OCRModel):
         if mlflow_tracking_uri is not None:
             mlflow.set_tracking_uri(mlflow_tracking_uri)
 
-        try:
-            downloaded_dir = mlflow.artifacts.download_artifacts(
-                artifact_uri=f"runs:/{self._mlflow_run_id}/adapters"
-            )
-        except Exception as exc:
-            # Provide a more actionable error by listing available artifact paths.
-            client = MlflowClient()
-            root_items = client.list_artifacts(self._mlflow_run_id, path="")
-            available = sorted({item.path for item in root_items})
-            raise RuntimeError(
-                "Failed to download MLflow artifacts at path 'adapters'. "
-                f"Run_id={self._mlflow_run_id}. "
-                f"Available artifact root paths: {available}. "
-                "This usually means the fine-tuning run didn't log the adapters. "
-                "Re-run fine-tuning and ensure it logs artifacts under 'adapters/'."
-            ) from exc
+        downloaded_dir = mlflow.artifacts.download_artifacts(artifact_uri=f"runs:/{self._mlflow_run_id}/adapters")
         self._adapters_dir = Path(downloaded_dir)
 
-        base_model = VisionEncoderDecoderModel.from_pretrained(
-            "agomberto/trocr-large-handwritten-fr"
-        )
+        base_model = VisionEncoderDecoderModel.from_pretrained("agomberto/trocr-large-handwritten-fr")
         self._model = PeftModel.from_pretrained(base_model, self._adapters_dir)
         self._model.to(self._device)
         self._model.eval()
@@ -58,9 +41,7 @@ class TrOCRFrFinetunedModel(OCRModel):
         self._tokenizer = AutoTokenizer.from_pretrained(self._adapters_dir)
 
     def predict(self, image: ImageInput) -> str:
-        pil_image = (
-            Image.open(image).convert("RGB") if isinstance(image, str) else image.convert("RGB")
-        )
+        pil_image = (Image.open(image).convert("RGB") if isinstance(image, str) else image.convert("RGB"))
 
         inputs = self._processor(images=pil_image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(self._device)

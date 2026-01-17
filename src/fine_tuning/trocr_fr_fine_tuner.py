@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import logging
 import random
 import os
@@ -134,36 +133,46 @@ def compute_cer_metrics(tokenizer: AutoTokenizer):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune TrOCR-FR on a local dataset.")
-    parser.add_argument("--images-dir", type=Path, default=Path("data_local/perso_dataset/hector_pages_lines_3/lines_out_sorted"), help="Directory that contains the line images.")
-    parser.add_argument("--ground-truth", type=Path, default=Path("data_local/perso_dataset/hector_pages_lines_3/gt_hector_pages_lines.json"), help="JSON file with the ground-truth transcriptions.")
-    parser.add_argument("--output-dir", type=Path, default=Path("models_local/finetuned/adapters"), help="Base directory for outputs (checkpoints, adapters, logs).")
-    parser.add_argument("--train-ratio", type=float, default=0.9, help="Proportion of samples used for training.")
-    parser.add_argument("--per-device-train-batch-size", type=int, default=4)
-    parser.add_argument("--per-device-eval-batch-size", type=int, default=4)
-    parser.add_argument("--learning-rate", type=float, default=3e-5)
-    parser.add_argument("--num-train-epochs", type=int, default=6)
-    parser.add_argument("--max-target-length", type=int, default=256)
-    parser.add_argument("--logging-steps", type=int, default=50)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--fp16", action="store_true", help="Enable mixed precision training.")
-    parser.add_argument("--lora-r", type=int, default=16, help="LoRA rank.")
-    parser.add_argument("--lora-alpha", type=int, default=32, help="LoRA alpha (scaling).")
-    parser.add_argument("--lora-dropout", type=float, default=0.1, help="LoRA dropout rate.")
-    parser.add_argument("--mlflow-experiment-name", type=str, required=True, help="MLflow experiment name to use for fine-tuning runs.")
-
-    args = parser.parse_args()
+    # ===== HYPERPARAMETERS (hardcoded) =====
+    # Training hyperparameters
+    per_device_train_batch_size = 4
+    per_device_eval_batch_size = 4
+    learning_rate = 1e-4 
+    num_train_epochs = 30
+    weight_decay = 0.01
+    warmup_ratio = 0.1     # 10% du temps pour monter en puissance
+    max_target_length = 256
+    logging_steps = 50
+    seed = 42
+    fp16 = True 
+    train_ratio = 0.9  
+    
+    # LoRA configuration
+    lora_r = 16
+    lora_alpha = 2*lora_r
+    lora_dropout = 0.1
+    target_modules = [
+        "query", "key", "value",                            # Encodeur (ViT)
+        "q_proj", "k_proj", "v_proj", "out_proj",           # Décodeur (Attention)
+        "fc1", "fc2", "intermediate.dense", "output.dense"  # Couches Feed-Forward
+    ]
+    
+    # ===== PATHS AND CONFIGURATION (hardcoded) =====
+    images_dir = Path("data_local/perso_dataset/hector_pages_lines_3/lines_out_sorted")
+    ground_truth_path = Path("data_local/perso_dataset/hector_pages_lines_3/gt_hector_pages_lines.json")
+    output_dir = Path("models_local/finetuned/adapters")
+    mlflow_experiment_name = "trocr-fr-finetuning"  # MLflow experiment name
 
     # Load env vars from project root .env (if present), without forcing users to pass secrets via CLI.
     project_root = Path(__file__).resolve().parents[2]
     load_dotenv(project_root / ".env")
 
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
 
-    images_dir = args.images_dir.expanduser().resolve()
-    ground_truth_path = args.ground_truth.expanduser().resolve()
-    output_dir = args.output_dir.expanduser().resolve()
+    images_dir = images_dir.expanduser().resolve()
+    ground_truth_path = ground_truth_path.expanduser().resolve()
+    output_dir = output_dir.expanduser().resolve()
     checkpoints_dir = output_dir / "checkpoints"
     adapters_dir = output_dir / "adapters"
     tb_dir = output_dir / "tb"
@@ -175,7 +184,7 @@ def main():
     mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
 
     mlflow.set_tracking_uri(mlflow_tracking_uri)
-    mlflow.set_experiment(args.mlflow_experiment_name)
+    mlflow.set_experiment(mlflow_experiment_name)
 
     if not images_dir.exists():
         raise FileNotFoundError(f"Images directory does not exist: {images_dir}")
@@ -189,7 +198,7 @@ def main():
     # loading, shuffling samples and spliting them in train & val samples
     samples = load_samples(images_dir, ground_truth_path)
     random.shuffle(samples)
-    split_idx = max(1, int(len(samples) * args.train_ratio))
+    split_idx = max(1, int(len(samples) * train_ratio))
     train_samples = samples[:split_idx]
     eval_samples = samples[split_idx:]
 
@@ -197,14 +206,17 @@ def main():
     # loading processor, model, lora config, tokenizer
     processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
     model = VisionEncoderDecoderModel.from_pretrained("agomberto/trocr-large-handwritten-fr")
+    
+    # LoRA configuration
     lora_config = LoraConfig(
-        r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],
-        lora_dropout=args.lora_dropout,
+        r=lora_r,
+        lora_alpha=lora_alpha,
+        target_modules=target_modules,
+        lora_dropout=lora_dropout,
         bias="none",
         task_type=TaskType.SEQ_2_SEQ_LM,
     )
+    
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
     tokenizer = AutoTokenizer.from_pretrained("agomberto/trocr-large-handwritten-fr")
@@ -225,31 +237,36 @@ def main():
 
     # ----- CREATING DATASETS -----
     # on vient créer des datasets ingérables par le modèle respecrant le format Hugging Face
-    train_dataset = TrOCRLineDataset(train_samples, processor, tokenizer, max_target_length=args.max_target_length)
-    eval_dataset = TrOCRLineDataset(eval_samples, processor, tokenizer, max_target_length=args.max_target_length)
+    train_dataset = TrOCRLineDataset(train_samples, processor, tokenizer, max_target_length=max_target_length)
+    eval_dataset = TrOCRLineDataset(eval_samples, processor, tokenizer, max_target_length=max_target_length)
 
     data_collator = TrOCRDataCollator(tokenizer)
 
     report_to = ["mlflow", "tensorboard"]
 
+    # Training arguments (hardcoded)
     training_args = Seq2SeqTrainingArguments(
         output_dir=str(checkpoints_dir),
         eval_strategy="epoch",
         save_strategy="epoch",
         logging_strategy="steps",
-        logging_steps=args.logging_steps,
+        logging_steps=logging_steps,
         logging_dir=str(tb_dir),
         report_to=report_to,
-        per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=args.per_device_eval_batch_size,
-        learning_rate=args.learning_rate,
-        num_train_epochs=args.num_train_epochs,
+        per_device_train_batch_size=per_device_train_batch_size,
+        per_device_eval_batch_size=per_device_eval_batch_size,
+        learning_rate=learning_rate,
+        num_train_epochs=num_train_epochs,
         predict_with_generate=True,
-        generation_max_length=args.max_target_length,
+        generation_max_length=max_target_length,
         load_best_model_at_end=True,
         metric_for_best_model="cer",
         greater_is_better=False,
-        fp16=args.fp16,
+        weight_decay=weight_decay,
+        lr_scheduler_type="cosine",
+        warmup_ratio=warmup_ratio,
+        fp16=fp16,
+        optim="adamw_torch",
         save_total_limit=3,
         remove_unused_columns=False,
         gradient_checkpointing=False,
@@ -289,4 +306,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-    
+

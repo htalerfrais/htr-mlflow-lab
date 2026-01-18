@@ -134,15 +134,6 @@ def compute_cer_metrics(tokenizer: AutoTokenizer):
         labels = np.where(labels == -100, tokenizer.pad_token_id, labels)
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
-        # --- AJOUT : AFFICHAGE DANS LA CONSOLE ---
-        print(f"\n--- EXEMPLES DE PRÉDICTIONS (Total: {len(decoded_preds)}) ---")
-        for i in range(min(5, len(decoded_preds))): # On en affiche 5
-            print(f"REF: {decoded_labels[i]}")
-            print(f"PRED: {decoded_preds[i]}")
-            print("-" * 20)
-        # ------------------------------------------
-
-
         cer_scores = [
             calculate_cer(ref, hyp) for ref, hyp in zip(decoded_labels, decoded_preds)  
         ]
@@ -253,7 +244,7 @@ def main():
     images_dir = Path("data_local/perso_dataset/hector_200_more_lines_extended/lines_out_sorted")
     ground_truth_path = Path("data_local/perso_dataset/hector_200_more_lines_extended/gt_hector_pages_lines.json")
     output_dir = Path("models_local/finetuned/adapters")
-    mlflow_experiment_name = "trocr-fr-finetuning"  # MLflow experiment name
+    mlflow_experiment_name = "trocr-finetuning"  # MLflow experiment name
 
     # Load env vars from project root .env (if present), without forcing users to pass secrets via CLI.
     project_root = Path(__file__).resolve().parents[2]
@@ -297,7 +288,7 @@ def main():
     # ----- LOADING MODEL -----
     # loading processor, model, lora config, tokenizer
     processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
-    model = VisionEncoderDecoderModel.from_pretrained("agomberto/trocr-large-handwritten-fr")
+    model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-large-handwritten")
     
     # LoRA configuration
     lora_config = LoraConfig(
@@ -311,7 +302,7 @@ def main():
     
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
-    tokenizer = AutoTokenizer.from_pretrained("agomberto/trocr-large-handwritten-fr")
+    tokenizer = AutoTokenizer.from_pretrained("microsoft/trocr-large-handwritten")
 
     if tokenizer.pad_token_id is None:
         if tokenizer.eos_token_id is None:

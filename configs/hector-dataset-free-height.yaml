@@ -5,7 +5,8 @@ dataset:
   name: "local_lines"
   images_dir: "data_local/perso_dataset/hector_pages_lines_3/lines_out_sorted"
   ground_truth_path: "data_local/perso_dataset/hector_pages_lines_3/gt_hector_pages_lines.json"
-model: "crnn_f"
+model:
+  name: "crnn_f"
 preprocessor: 
   - name: "binarize"
 

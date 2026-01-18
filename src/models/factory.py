@@ -6,6 +6,7 @@ from src.models.base import OCRModel
 from src.models.tesseract_model import TesseractModel
 from src.models.trocr_model import TrOCRModel
 from src.models.trocr_fr_model import TrOCRFrModel
+from src.models.trocr_fr_finetuned import TrOCRFrFinetunedModel
 from src.models.crnn_f_model import CRNNFModel
 
 
@@ -16,19 +17,20 @@ class ModelFactory:
         "tesseract": TesseractModel,
         "trocr": TrOCRModel,
         "trocr_fr": TrOCRFrModel,
+        "trocr_fr_finetuned": TrOCRFrFinetunedModel,
         "crnn_f": CRNNFModel,
     }
 
     @classmethod
-    def create(cls, model_name: str) -> OCRModel:
-        """Create a model instance for the provided model name using sensible defaults."""
+    def create(cls, model_name: str, **model_params) -> OCRModel:
+        """Create a model instance for the provided model name."""
         
         model_class = cls._registry.get(model_name.lower())
         if model_class is None:
             available = ", ".join(sorted(cls._registry.keys())) or "<none>"
             raise ValueError(f"Unknown model '{model_name}'. Available models: {available}")
 
-        return model_class()
+        return model_class(**model_params)
 
     # a rendre plus dynamique en utilisant les arguments du fichier de config
     # on utilise des arguments plus précis de la liste de config des qu'on veut comparer des resultats obtenus avec des paramètres différents pour un meme model

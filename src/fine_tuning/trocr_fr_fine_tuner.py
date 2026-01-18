@@ -1,26 +1,33 @@
 from __future__ import annotations
 
-import argparse
 import logging
 import random
+import os
+import importlib.util
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 import numpy as np
 import torch
+import mlflow
 from PIL import Image
 from torch.utils.data import Dataset
 from transformers import (
     AutoTokenizer,
     EvalPrediction,
+    EarlyStoppingCallback,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
+    TrainerCallback,
     TrOCRProcessor,
     VisionEncoderDecoderModel,
 )
 
+from peft import LoraConfig, TaskType, get_peft_model
 from src.data.local_importer import LocalLineImporter
 from src.utils.metrics import calculate_cer
+from dotenv import load_dotenv
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -47,7 +54,7 @@ class TrOCRLineDataset(Dataset):
     def __getitem__(self, idx: int) -> dict:
         image_path, transcription = self.samples[idx]
         image = Image.open(image_path).convert("RGB")
-        pixel_values = self.processor(images=image, return_tensors="pt").pixel_values.squeeze(0)
+        pixel_values = self.processor(images=image, return_tensors="pt").pixel_values.squeeze(0) #squeeze(0) removes the first dimension of the tensor (batch dimension)
 
         tokenized = self.tokenizer(
             transcription,
@@ -57,7 +64,7 @@ class TrOCRLineDataset(Dataset):
             return_attention_mask=False,
             return_tensors="pt",
         )
-        labels = tokenized.input_ids.squeeze(0)
+        labels = tokenized.input_ids.squeeze(0) #squeeze(0) removes the first dimension of the tensor (batch dimension)
 
         pad_token_id = self.tokenizer.pad_token_id
         if pad_token_id is None:
@@ -65,7 +72,7 @@ class TrOCRLineDataset(Dataset):
 
         labels = torch.where(labels == pad_token_id, -100, labels)
 
-        return {"pixel_values": pixel_values, "labels": labels}
+        return {"pixel_values": pixel_values, "labels": labels} # pixel_values : [3, 384, 384]
 
 
 class TrOCRDataCollator:
@@ -81,10 +88,9 @@ class TrOCRDataCollator:
             batch_first=True,
             padding_value=self.tokenizer.pad_token_id,
         )
-        batch_labels = torch.where(
-            batch_labels == self.tokenizer.pad_token_id, -100, batch_labels
-        )
+        batch_labels = torch.where(batch_labels == self.tokenizer.pad_token_id, -100, batch_labels)
         return {"pixel_values": batch_pixel_values, "labels": batch_labels}
+
 
 
 def load_samples(images_dir: Path, ground_truth_path: Path) -> List[Tuple[str, str]]:
@@ -92,7 +98,7 @@ def load_samples(images_dir: Path, ground_truth_path: Path) -> List[Tuple[str, s
     importer = LocalLineImporter(
         images_dir=str(images_dir),
         ground_truth_path=str(ground_truth_path),
-        image_template="page_*_line_{id:04d}.jpg",
+        image_template="*line_{id:04d}.jpg",
     )
     samples, dataset_info = importer.import_data()
 
@@ -105,9 +111,10 @@ def load_samples(images_dir: Path, ground_truth_path: Path) -> List[Tuple[str, s
 
 def compute_cer_metrics(tokenizer: AutoTokenizer):
     """Build the metrics callback that returns the CER."""
-
+    # fonction imbriquée pour avoir une fonction du format attendu par Seq2SeqTrainer
     def _compute(prediction: EvalPrediction) -> dict:
         generated_ids = prediction.predictions
+        # EvalPrediction.predictions est un tuple de 2 éléments : (generated_ids, labels)
         if isinstance(generated_ids, tuple):
             generated_ids = generated_ids[0]
 
@@ -117,7 +124,7 @@ def compute_cer_metrics(tokenizer: AutoTokenizer):
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
         cer_scores = [
-            calculate_cer(ref, hyp) for ref, hyp in zip(decoded_labels, decoded_preds)
+            calculate_cer(ref, hyp) for ref, hyp in zip(decoded_labels, decoded_preds)  
         ]
         average_cer = float(np.mean(cer_scores)) if cer_scores else float("nan")
         return {"cer": average_cer}
@@ -125,60 +132,96 @@ def compute_cer_metrics(tokenizer: AutoTokenizer):
     return _compute
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Fine-tune TrOCR-FR on a local dataset.")
-    parser.add_argument(
-        "--images-dir",
-        type=Path,
-        default=Path("data_local/perso_dataset/hector_pages_lines_3/lines_out_sorted"),
-        help="Directory that contains the line images.",
-    )
-    parser.add_argument(
-        "--ground-truth",
-        type=Path,
-        default=Path("data_local/perso_dataset/hector_pages_lines_3/gt_hector_pages_lines.json"),
-        help="JSON file with the ground-truth transcriptions.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("models/trocr-fr-finetuned"),
-        help="Directory where Hugging Face checkpoints will be saved.",
-    )
-    parser.add_argument("--train-ratio", type=float, default=0.9, help="Proportion of samples used for training.")
-    parser.add_argument("--per-device-train-batch-size", type=int, default=4)
-    parser.add_argument("--per-device-eval-batch-size", type=int, default=4)
-    parser.add_argument("--learning-rate", type=float, default=3e-5)
-    parser.add_argument("--num-train-epochs", type=int, default=6)
-    parser.add_argument("--max-target-length", type=int, default=256)
-    parser.add_argument("--logging-steps", type=int, default=50)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--fp16", action="store_true", help="Enable mixed precision training.")
 
-    args = parser.parse_args()
 
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
 
-    images_dir = args.images_dir.expanduser().resolve()
-    ground_truth_path = args.ground_truth.expanduser().resolve()
-    output_dir = args.output_dir.expanduser().resolve()
+def main():
+    # ===== HYPERPARAMETERS (hardcoded) =====
+    # Training hyperparameters
+    per_device_train_batch_size = 16
+    per_device_eval_batch_size = 16
+    learning_rate = 1e-4 
+    num_train_epochs = 40
+    weight_decay = 0.0001
+    warmup_ratio = 0.1     # 10% du temps pour monter en puissance
+    max_target_length = 256
+    logging_steps = 50
+    seed = 42
+    fp16 = False 
+    train_ratio = 0.9  
+    
+    # LoRA configuration
+    lora_r = 16
+    lora_alpha = 2*lora_r
+    lora_dropout = 0.1
+    target_modules = [
+        "query", "key", "value", "dense",                   # Encodeur (ViT)
+        "q_proj", "k_proj", "v_proj", "out_proj",           # Décodeur (Attention)
+        "fc1", "fc2"                                        # Couches Feed-Forward
+    ]
+    
+    # ===== PATHS AND CONFIGURATION (hardcoded) =====
+    images_dir = Path("data_local/perso_dataset/hector_pages_lines_3.2/lines_out_sorted")
+    ground_truth_path = Path("data_local/perso_dataset/hector_pages_lines_3.2/gt_hector_pages_lines.json")
+    output_dir = Path("models_local/finetuned/adapters")
+    mlflow_experiment_name = "trocr-fr-finetuning"  # MLflow experiment name
+
+    # Load env vars from project root .env (if present), without forcing users to pass secrets via CLI.
+    project_root = Path(__file__).resolve().parents[2]
+    load_dotenv(project_root / ".env")
+
+    random.seed(seed)
+    torch.manual_seed(seed)
+
+    images_dir = images_dir.expanduser().resolve()
+    ground_truth_path = ground_truth_path.expanduser().resolve()
+    output_dir = output_dir.expanduser().resolve()
+    checkpoints_dir = output_dir / "checkpoints"
+    adapters_dir = output_dir / "adapters"
+    tb_dir = output_dir / "tb"
+
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+    adapters_dir.mkdir(parents=True, exist_ok=True)
+    tb_dir.mkdir(parents=True, exist_ok=True)
+
+    mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+
+    mlflow.set_tracking_uri(mlflow_tracking_uri)
+    mlflow.set_experiment(mlflow_experiment_name)
 
     if not images_dir.exists():
         raise FileNotFoundError(f"Images directory does not exist: {images_dir}")
     if not ground_truth_path.exists():
         raise FileNotFoundError(f"Ground-truth file does not exist: {ground_truth_path}")
 
+
+
+    # ----- IMPORTING DATA -----
+
+    # loading, shuffling samples and spliting them in train & val samples
     samples = load_samples(images_dir, ground_truth_path)
     random.shuffle(samples)
-    split_idx = max(1, int(len(samples) * args.train_ratio))
+    split_idx = max(1, int(len(samples) * train_ratio))
     train_samples = samples[:split_idx]
     eval_samples = samples[split_idx:]
-    if not eval_samples:
-        eval_samples = train_samples[-1:]
 
+    # ----- LOADING MODEL -----
+    # loading processor, model, lora config, tokenizer
     processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
     model = VisionEncoderDecoderModel.from_pretrained("agomberto/trocr-large-handwritten-fr")
+    
+    # LoRA configuration
+    lora_config = LoraConfig(
+        r=lora_r,
+        lora_alpha=lora_alpha,
+        target_modules=target_modules,
+        lora_dropout=lora_dropout,
+        bias="none",
+        task_type=TaskType.SEQ_2_SEQ_LM,
+    )
+    
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
     tokenizer = AutoTokenizer.from_pretrained("agomberto/trocr-large-handwritten-fr")
 
     if tokenizer.pad_token_id is None:
@@ -194,45 +237,76 @@ def main() -> None:
     model.config.pad_token_id = tokenizer.pad_token_id
     model.config.vocab_size = tokenizer.vocab_size
 
-    train_dataset = TrOCRLineDataset(
-        train_samples, processor, tokenizer, max_target_length=args.max_target_length
-    )
-    eval_dataset = TrOCRLineDataset(
-        eval_samples, processor, tokenizer, max_target_length=args.max_target_length
-    )
+
+    # ----- CREATING DATASETS -----
+    # on vient créer des datasets ingérables par le modèle respecrant le format Hugging Face
+    train_dataset = TrOCRLineDataset(train_samples, processor, tokenizer, max_target_length=max_target_length)
+    eval_dataset = TrOCRLineDataset(eval_samples, processor, tokenizer, max_target_length=max_target_length)
 
     data_collator = TrOCRDataCollator(tokenizer)
 
+    report_to = ["mlflow", "tensorboard"]
+
+    # Training arguments (hardcoded)
     training_args = Seq2SeqTrainingArguments(
-        output_dir=str(output_dir),
-        evaluation_strategy="epoch",
+        output_dir=str(checkpoints_dir),
+        eval_strategy="epoch",
         save_strategy="epoch",
         logging_strategy="steps",
-        logging_steps=args.logging_steps,
-        per_device_train_batch_size=args.per_device_train_batch_size,
-        per_device_eval_batch_size=args.per_device_eval_batch_size,
-        learning_rate=args.learning_rate,
-        num_train_epochs=args.num_train_epochs,
+        logging_steps=logging_steps,
+        logging_dir=str(tb_dir),
+        report_to=report_to,
+        per_device_train_batch_size=per_device_train_batch_size,
+        per_device_eval_batch_size=per_device_eval_batch_size,
+        learning_rate=learning_rate,
+        num_train_epochs=num_train_epochs,
         predict_with_generate=True,
-        fp16=args.fp16,
+        generation_max_length=max_target_length,
+        load_best_model_at_end=True,
+        metric_for_best_model="cer",
+        greater_is_better=False,
+        weight_decay=weight_decay,
+        lr_scheduler_type="cosine",
+        warmup_ratio=warmup_ratio,
+        fp16=fp16,
+        optim="adamw_torch",
         save_total_limit=3,
         remove_unused_columns=False,
         gradient_checkpointing=False,
     )
 
-    trainer = Seq2SeqTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        data_collator=data_collator,
-        tokenizer=tokenizer,
-        compute_metrics=compute_cer_metrics(tokenizer),
-    )
+    with mlflow.start_run():
+        trainer = Seq2SeqTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            data_collator=data_collator,
+            tokenizer=tokenizer,
+            compute_metrics=compute_cer_metrics(tokenizer),
+            callbacks=[
+                # EarlyStoppingCallback(early_stopping_patience=3),
+            ],
+        )
 
-    trainer.train()
-    trainer.save_model(output_dir)
+        trainer.train()
+
+        # Save adapters locally first, then log them to MLflow (so the artifact path exists for inference).
+        model.save_pretrained(adapters_dir)
+        tokenizer.save_pretrained(adapters_dir)
+        processor.save_pretrained(adapters_dir)
+
+        if adapters_dir.exists():
+            mlflow.log_artifacts(str(adapters_dir), artifact_path="adapters")
+        if tb_dir.exists():
+            mlflow.log_artifacts(str(tb_dir), artifact_path="tensorboard")
+
+        active_run = mlflow.active_run()
+        if active_run is not None:
+            logger.info("MLflow run_id: %s", active_run.info.run_id)
 
 
 if __name__ == "__main__":
     main()
+
+

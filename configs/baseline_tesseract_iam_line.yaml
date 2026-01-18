@@ -3,7 +3,10 @@ experiment_name: HTR - Baselines
 run_name: tesseract_iam_line_test
 granularity: line
 dataset: Teklia/IAM-line
-model: Tesseract
+model:
+  name: tesseract
+  lang: eng
+  engine_mode: 3
 pipeline: line_to_text
 data_path: Teklia/IAM-line
 fine_tuning:

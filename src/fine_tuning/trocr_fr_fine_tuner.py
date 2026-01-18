@@ -22,6 +22,7 @@ from transformers import (
     TrOCRProcessor,
     VisionEncoderDecoderModel,
 )
+import albumentations as A
 
 from peft import LoraConfig, TaskType, get_peft_model
 from src.data.local_importer import LocalLineImporter
@@ -42,11 +43,13 @@ class TrOCRLineDataset(Dataset):
         processor: TrOCRProcessor,
         tokenizer: AutoTokenizer,
         max_target_length: int = 256,
+        augmentation_pipeline=None,
     ):
         self.samples = samples
         self.processor = processor
         self.tokenizer = tokenizer
         self.max_target_length = max_target_length
+        self.augmentation_pipeline = augmentation_pipeline
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -54,6 +57,14 @@ class TrOCRLineDataset(Dataset):
     def __getitem__(self, idx: int) -> dict:
         image_path, transcription = self.samples[idx]
         image = Image.open(image_path).convert("RGB")
+        
+        # Apply data augmentation if configured
+        if self.augmentation_pipeline is not None:
+            # Albumentations expects numpy array
+            image_np = np.array(image)
+            augmented = self.augmentation_pipeline(image=image_np)
+            image = Image.fromarray(augmented["image"])
+        
         pixel_values = self.processor(images=image, return_tensors="pt").pixel_values.squeeze(0) #squeeze(0) removes the first dimension of the tensor (batch dimension)
 
         tokenized = self.tokenizer(
@@ -132,6 +143,57 @@ def compute_cer_metrics(tokenizer: AutoTokenizer):
     return _compute
 
 
+def create_augmentation_pipeline(config: dict):
+    """
+    Create an Albumentations pipeline for OCR-friendly data augmentation.
+    
+    Args:
+        config: Dictionary with augmentation settings. Must include 'enabled' key.
+                Returns None if config['enabled'] is False.
+    
+    Returns:
+        A.Compose object or None if augmentation is disabled.
+    """
+    if not config.get("enabled", False):
+        return None
+    
+    transforms = []
+    
+    # Rotation (very light for OCR)
+    if config.get("rotation_enabled", False):
+        transforms.append(A.Rotate(
+            limit=config.get("rotation_limit", 2),
+            p=config.get("rotation_p", 0.5),
+            border_mode=0,  # constant border with zeros
+        ))
+    
+    # Brightness & Contrast
+    if config.get("brightness_contrast_enabled", False):
+        transforms.append(A.RandomBrightnessContrast(
+            brightness_limit=config.get("brightness_limit", 0.2),
+            contrast_limit=config.get("contrast_limit", 0.2),
+            p=config.get("brightness_contrast_p", 0.5),
+        ))
+    
+    # Gaussian Blur
+    if config.get("gaussian_blur_enabled", False):
+        transforms.append(A.GaussianBlur(
+            blur_limit=config.get("gaussian_blur_limit", (3, 3)),
+            p=config.get("gaussian_blur_p", 0.3),
+        ))
+    
+    # Gaussian Noise
+    if config.get("gaussian_noise_enabled", False):
+        transforms.append(A.GaussNoise(
+            var_limit=config.get("gaussian_noise_var_limit", (10.0, 50.0)),
+            p=config.get("gaussian_noise_p", 0.3),
+        ))
+    
+    if not transforms:
+        logger.warning("Data augmentation enabled but no transforms are configured.")
+        return None
+    
+    return A.Compose(transforms)
 
 
 
@@ -159,6 +221,24 @@ def main():
         "q_proj", "k_proj", "v_proj", "out_proj",           # Décodeur (Attention)
         "fc1", "fc2"                                        # Couches Feed-Forward
     ]
+    
+    # Data augmentation configuration (OCR-friendly transforms)
+    augmentation_config = {
+        "enabled": True,
+        "rotation_enabled": True,
+        "rotation_limit": 2,
+        "rotation_p": 0.5,
+        "brightness_contrast_enabled": True,
+        "brightness_limit": 0.2,
+        "contrast_limit": 0.2,
+        "brightness_contrast_p": 0.5,
+        "gaussian_blur_enabled": True,
+        "gaussian_blur_limit": (3, 3),
+        "gaussian_blur_p": 0.3,
+        "gaussian_noise_enabled": True,
+        "gaussian_noise_var_limit": (10.0, 50.0),
+        "gaussian_noise_p": 0.3,
+    }
     
     # ===== PATHS AND CONFIGURATION (hardcoded) =====
     images_dir = Path("data_local/perso_dataset/hector_200_more_lines_extended/lines_out_sorted")
@@ -239,9 +319,28 @@ def main():
 
 
     # ----- CREATING DATASETS -----
+    # Create augmentation pipeline (only for training)
+    augmentation_pipeline = create_augmentation_pipeline(augmentation_config)
+    if augmentation_pipeline:
+        logger.info("Data augmentation enabled for training")
+    else:
+        logger.info("Data augmentation disabled")
+    
     # on vient créer des datasets ingérables par le modèle respecrant le format Hugging Face
-    train_dataset = TrOCRLineDataset(train_samples, processor, tokenizer, max_target_length=max_target_length)
-    eval_dataset = TrOCRLineDataset(eval_samples, processor, tokenizer, max_target_length=max_target_length)
+    train_dataset = TrOCRLineDataset(
+        train_samples, 
+        processor, 
+        tokenizer, 
+        max_target_length=max_target_length,
+        augmentation_pipeline=augmentation_pipeline  # Apply augmentation only to train
+    )
+    eval_dataset = TrOCRLineDataset(
+        eval_samples, 
+        processor, 
+        tokenizer, 
+        max_target_length=max_target_length,
+        augmentation_pipeline=None  # No augmentation for eval
+    )
 
     data_collator = TrOCRDataCollator(tokenizer)
 
@@ -276,6 +375,10 @@ def main():
     )
 
     with mlflow.start_run():
+        # Log data augmentation configuration to MLflow
+        aug_params = {f"aug_{k}": v for k, v in augmentation_config.items()}
+        mlflow.log_params(aug_params)
+        
         trainer = Seq2SeqTrainer(
             model=model,
             args=training_args,

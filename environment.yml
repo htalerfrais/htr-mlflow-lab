@@ -24,3 +24,4 @@ dependencies:
       - onnxruntime
       - onnx
       - tensorboard
+      - albumentations

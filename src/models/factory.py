@@ -8,6 +8,7 @@ from src.models.trocr_model import TrOCRModel
 from src.models.trocr_fr_model import TrOCRFrModel
 from src.models.trocr_fr_finetuned import TrOCRFrFinetunedModel
 from src.models.crnn_f_model import CRNNFModel
+from src.models.qwen_vl import QwenVLModel
 
 
 class ModelFactory:
@@ -19,6 +20,7 @@ class ModelFactory:
         "trocr_fr": TrOCRFrModel,
         "trocr_fr_finetuned": TrOCRFrFinetunedModel,
         "crnn_f": CRNNFModel,
+        "qwen_vl": QwenVLModel,
     }
 
     @classmethod

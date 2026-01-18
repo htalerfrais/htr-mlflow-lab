@@ -140,15 +140,15 @@ def main():
     # Training hyperparameters
     per_device_train_batch_size = 16
     per_device_eval_batch_size = 16
-    learning_rate = 1e-4 
-    num_train_epochs = 40
-    weight_decay = 0.0001
+    learning_rate = 1e-5 
+    num_train_epochs = 30
+    weight_decay = 0.01
     warmup_ratio = 0.1     # 10% du temps pour monter en puissance
     max_target_length = 256
     logging_steps = 50
     seed = 42
     fp16 = False 
-    train_ratio = 0.9  
+    train_ratio = 0.8  
     
     # LoRA configuration
     lora_r = 16
@@ -161,8 +161,8 @@ def main():
     ]
     
     # ===== PATHS AND CONFIGURATION (hardcoded) =====
-    images_dir = Path("data_local/perso_dataset/hector_pages_lines_3.2/lines_out_sorted")
-    ground_truth_path = Path("data_local/perso_dataset/hector_pages_lines_3.2/gt_hector_pages_lines.json")
+    images_dir = Path("data_local/perso_dataset/hector_200_more_lines_extended/lines_out_sorted")
+    ground_truth_path = Path("data_local/perso_dataset/hector_200_more_lines_extended/gt_hector_pages_lines.json")
     output_dir = Path("models_local/finetuned/adapters")
     mlflow_experiment_name = "trocr-fr-finetuning"  # MLflow experiment name
 
@@ -266,7 +266,7 @@ def main():
         metric_for_best_model="cer",
         greater_is_better=False,
         weight_decay=weight_decay,
-        lr_scheduler_type="cosine",
+        lr_scheduler_type="linear",
         warmup_ratio=warmup_ratio,
         fp16=fp16,
         optim="adamw_torch",

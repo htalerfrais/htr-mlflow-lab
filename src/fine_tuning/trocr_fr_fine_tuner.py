@@ -148,7 +148,7 @@ def main():
     logging_steps = 50
     seed = 42
     fp16 = False 
-    train_ratio = 0.8  
+    train_ratio = 0.9
     
     # LoRA configuration
     lora_r = 16

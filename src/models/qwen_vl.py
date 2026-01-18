@@ -17,7 +17,7 @@ class QwenVLModel(OCRModel):
 
     def __init__(
         self,
-        pretrained_model_name: str = "Qwen/Qwen2.5-VL-7B-Instruct",
+        pretrained_model_name: str = "Qwen/Qwen2.5-VL-3B-Instruct",
         device: str | None = None,
         device_map: str | dict | None = "auto",
         torch_dtype: str | None = "auto",

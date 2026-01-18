@@ -198,6 +198,15 @@ def create_augmentation_pipeline(config: dict):
             p=config.get("gaussian_noise_p", 0.3),
         ))
     
+    # Shift Scale Rotate
+    transforms.append(A.ShiftScaleRotate(
+        shift_limit=0.05, 
+        scale_limit=0.05, 
+        rotate_limit=2, 
+        p=0.5, 
+        border_mode=0
+    ))
+    
     if not transforms:
         logger.warning("Data augmentation enabled but no transforms are configured.")
         return None
@@ -226,9 +235,8 @@ def main():
     lora_alpha = lora_r
     lora_dropout = 0.1
     target_modules = [
-        "query", "key", "value", "dense",                   # Encodeur (ViT)
+        "query", "key", "value",                            # Encodeur (ViT)
         "q_proj", "k_proj", "v_proj", "out_proj",           # Décodeur (Attention)
-        "fc1", "fc2"                                        # Couches Feed-Forward
     ]
     
     # Data augmentation configuration (OCR-friendly transforms)
@@ -298,6 +306,15 @@ def main():
     # loading processor, model, lora config, tokenizer
     processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
     model = VisionEncoderDecoderModel.from_pretrained("agomberto/trocr-large-handwritten-fr")
+    tokenizer = AutoTokenizer.from_pretrained("agomberto/trocr-large-handwritten-fr")
+    
+    # Log tokenizer special tokens for debugging
+    logger.info("Tokenizer special tokens:")
+    logger.info(f"  - pad_token_id: {tokenizer.pad_token_id}")
+    logger.info(f"  - bos_token_id: {tokenizer.bos_token_id}")
+    logger.info(f"  - eos_token_id: {tokenizer.eos_token_id}")
+    logger.info(f"  - cls_token_id: {tokenizer.cls_token_id}")
+    logger.info(f"  - vocab_size: {tokenizer.vocab_size}")
     
     # LoRA configuration
     lora_config = LoraConfig(
@@ -311,20 +328,26 @@ def main():
     
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
-    tokenizer = AutoTokenizer.from_pretrained("agomberto/trocr-large-handwritten-fr")
 
+    # Configure tokenizer padding token if needed
     if tokenizer.pad_token_id is None:
         if tokenizer.eos_token_id is None:
             raise ValueError("Tokenizer must define pad or EOS token id.")
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
-    decoder_start_token_id = tokenizer.cls_token_id or tokenizer.bos_token_id
+    # For RoBERTa (TrOCR decoder), use bos_token_id (NOT cls_token_id which doesn't exist)
+    decoder_start_token_id = tokenizer.bos_token_id
     if decoder_start_token_id is None:
-        decoder_start_token_id = tokenizer.pad_token_id
+        # Fallback: if no bos, use eos (NOT pad!)
+        decoder_start_token_id = tokenizer.eos_token_id
+        if decoder_start_token_id is None:
+            raise ValueError("Tokenizer must define bos_token_id or eos_token_id")
+    
+    logger.info(f"Using decoder_start_token_id: {decoder_start_token_id}")
 
     model.config.decoder_start_token_id = decoder_start_token_id
     model.config.pad_token_id = tokenizer.pad_token_id
-    model.config.vocab_size = tokenizer.vocab_size
+    # Note: vocab_size is already defined in model.config.decoder - no need to set it here
 
 
     # ----- CREATING DATASETS -----

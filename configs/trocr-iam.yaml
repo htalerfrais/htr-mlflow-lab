@@ -1,5 +1,5 @@
 experiment_name: "Checking TrOCR on IAM-line"
-run_name: "trocr_fr_base_handwritten_iam_line"
+run_name: "trocr_base_handwritten_iam_line"
 
 pipeline: "line_to_text"
 
@@ -9,5 +9,5 @@ preprocessor:
   - "identity"
 
 model:
-  name: "trocr_fr"
+  name: "trocr"
   max_new_tokens: 256

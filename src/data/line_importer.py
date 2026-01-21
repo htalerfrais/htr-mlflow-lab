@@ -20,7 +20,7 @@ class IAMLineImporter(DataImporter):
         self._dataset_name = dataset_name
         self._config_name = config_name
 
-    def import_data(self, split: str = "validation") -> Tuple[List[Sample], DatasetInfo]:
+    def import_data(self, split: str = "test") -> Tuple[List[Sample], DatasetInfo]:
         try:
             dataset = load_dataset(self._dataset_name, self._config_name)
 

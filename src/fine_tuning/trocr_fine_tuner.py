@@ -14,6 +14,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from transformers import (
     AutoTokenizer,
+    default_data_collator,
     EvalPrediction,
     EarlyStoppingCallback,
     Seq2SeqTrainer,
@@ -41,13 +42,11 @@ class TrOCRLineDataset(Dataset):
         self,
         samples: List[Tuple[str, str]],
         processor: TrOCRProcessor,
-        tokenizer: AutoTokenizer,
         max_target_length: int = 256,
         augmentation_pipeline=None,
     ):
         self.samples = samples
         self.processor = processor
-        self.tokenizer = tokenizer
         self.max_target_length = max_target_length
         self.augmentation_pipeline = augmentation_pipeline
 
@@ -67,41 +66,12 @@ class TrOCRLineDataset(Dataset):
         
         pixel_values = self.processor(images=image, return_tensors="pt").pixel_values.squeeze(0) #squeeze(0) removes the first dimension of the tensor (batch dimension)
 
-        tokenized = self.tokenizer(
-            transcription,
-            padding="max_length",
-            truncation=True,
-            max_length=self.max_target_length,
-            return_attention_mask=False,
-            return_tensors="pt",
-        )
-        labels = tokenized.input_ids.squeeze(0) #squeeze(0) removes the first dimension of the tensor (batch dimension)
+        labels = self.processor.tokenizer(transcription, padding="max_length", max_length=self.max_target_length).input_ids.squeeze(0) #squeeze(0) removes the first dimension of the tensor (batch dimension)
+        # make pad token = -100 so that it is ignored by the loss function
+        labels = [label if label != self.processor.tokenizer.pad_token_id else -100 for label in labels]
 
-        pad_token_id = self.tokenizer.pad_token_id
-        if pad_token_id is None:
-            raise ValueError("Tokenizer must define a pad_token_id for Seq2Seq training.")
-
-        labels = torch.where(labels == pad_token_id, -100, labels)
-
-        return {"pixel_values": pixel_values, "labels": labels} # pixel_values : [3, 384, 384]
-
-
-class TrOCRDataCollator:
-    """Collator that batches pixel values and labels while handling padding."""
-
-    def __init__(self, tokenizer: AutoTokenizer):
-        self.tokenizer = tokenizer
-
-    def __call__(self, features: List[dict]) -> dict:
-        batch_pixel_values = torch.stack([feature["pixel_values"] for feature in features])
-        batch_labels = torch.nn.utils.rnn.pad_sequence(
-            [feature["labels"] for feature in features],
-            batch_first=True,
-            padding_value=self.tokenizer.pad_token_id,
-        )
-        batch_labels = torch.where(batch_labels == self.tokenizer.pad_token_id, -100, batch_labels)
-        return {"pixel_values": batch_pixel_values, "labels": batch_labels}
-
+        encoding = {"pixel_values": pixel_values, "labels": labels} # pixel_values : [3, 384, 384]
+        return encoding
 
 
 def load_samples(images_dir: Path, ground_truth_path: Path) -> List[Tuple[str, str]]:
@@ -120,49 +90,22 @@ def load_samples(images_dir: Path, ground_truth_path: Path) -> List[Tuple[str, s
     return samples
 
 
-def compute_cer_metrics(tokenizer: AutoTokenizer):
-    """Build the metrics callback that returns the CER."""
-    # fonction imbriquée pour avoir une fonction du format attendu par Seq2SeqTrainer
-    def _compute(prediction: EvalPrediction) -> dict:
-        generated_ids = prediction.predictions
-        # EvalPrediction.predictions est un tuple de 2 éléments : (generated_ids, labels)
-        if isinstance(generated_ids, tuple):
-            generated_ids = generated_ids[0]
 
-        decoded_preds = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        labels = prediction.label_ids
-        labels = np.where(labels == -100, tokenizer.pad_token_id, labels)
-        decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+def compute_cer(prediction: EvalPrediction, processor: TrOCRProcessor) -> dict:
+    generated_ids = prediction.predictions
+    labels_ids = prediction.label_ids
 
-        # --- AJOUT : AFFICHAGE DANS LA CONSOLE ---
-        print(f"\n--- EXEMPLES DE PRÉDICTIONS (Total: {len(decoded_preds)}) ---")
-        for i in range(min(5, len(decoded_preds))): # On en affiche 5
-            print(f"REF: {decoded_labels[i]}")
-            print(f"PRED: {decoded_preds[i]}")
-            print("-" * 20)
-        # ------------------------------------------
+    
+    decoded_preds = processor.batch_decode(generated_ids, skip_special_tokens=True) # returning a list (batch)
+    labels_ids[labels_ids == -100] = processor.tokenizer.pad_token_id
+    decoded_labels = processor.batch_decode(labels_ids, skip_special_tokens=True)
 
-
-        cer_scores = [
-            calculate_cer(ref, hyp) for ref, hyp in zip(decoded_labels, decoded_preds)  
-        ]
-        average_cer = float(np.mean(cer_scores)) if cer_scores else float("nan")
-        return {"cer": average_cer}
-
-    return _compute
-
+    cer_scores = [calculate_cer(ref, hyp) for ref, hyp in zip(decoded_labels, decoded_preds)]
+    average_cer = float(np.mean(cer_scores)) if cer_scores else float("nan")
+    return average_cer
+    
 
 def create_augmentation_pipeline(config: dict):
-    """
-    Create an Albumentations pipeline for OCR-friendly data augmentation.
-    
-    Args:
-        config: Dictionary with augmentation settings. Must include 'enabled' key.
-                Returns None if config['enabled'] is False.
-    
-    Returns:
-        A.Compose object or None if augmentation is disabled.
-    """
     if not config.get("enabled", False):
         return None
     
@@ -174,6 +117,14 @@ def create_augmentation_pipeline(config: dict):
             limit=config.get("rotation_limit", 2),
             p=config.get("rotation_p", 0.5),
             border_mode=0,  # constant border with zeros
+        ))
+    
+    # Brightness & Contrast
+    if config.get("brightness_contrast_enabled", False):
+        transforms.append(A.RandomBrightnessContrast(
+            brightness_limit=config.get("brightness_limit", 0.2),
+            contrast_limit=config.get("contrast_limit", 0.2),
+            p=config.get("brightness_contrast_p", 0.5),
         ))
     
     # Gaussian Blur
@@ -191,15 +142,6 @@ def create_augmentation_pipeline(config: dict):
             p=config.get("gaussian_noise_p", 0.3),
         ))
     
-    # Affine transform (replaces deprecated ShiftScaleRotate)
-    transforms.append(A.Affine(
-        translate_percent={"x": (-0.05, 0.05), "y": (-0.05, 0.05)},  # shift_limit
-        scale=(0.95, 1.05),  # scale_limit (1.0 ± 0.05)
-        rotate=(-2, 2),  # rotate_limit
-        p=0.5,
-        border_mode=0,  # 0 = constant
-    ))
-    
     if not transforms:
         logger.warning("Data augmentation enabled but no transforms are configured.")
         return None
@@ -214,7 +156,7 @@ def main():
     per_device_train_batch_size = 16
     per_device_eval_batch_size = 16
     learning_rate = 1e-5 
-    num_train_epochs = 15
+    num_train_epochs = 30
     weight_decay = 0.01
     warmup_ratio = 0.2     # 10% du temps pour monter en puissance
     max_target_length = 256
@@ -224,20 +166,25 @@ def main():
     train_ratio = 0.9
     
     # LoRA configuration
-    lora_r = 8
+    lora_r = 16
     lora_alpha = lora_r
     lora_dropout = 0.1
     target_modules = [
-        "query", "value",           # Encodeur (ViT)
-        "q_proj", "v_proj"          # Décodeur
+        "query", "key", "value", "dense",                   # Encodeur (ViT)
+        "q_proj", "k_proj", "v_proj", "out_proj",           # Décodeur (Attention)
+        "fc1", "fc2"                                        # Couches Feed-Forward
     ]
     
     # Data augmentation configuration (OCR-friendly transforms)
     augmentation_config = {
-        "enabled": False,
+        "enabled": True,
         "rotation_enabled": True,
         "rotation_limit": 2,
         "rotation_p": 0.5,
+        "brightness_contrast_enabled": True,
+        "brightness_limit": 0.2,
+        "contrast_limit": 0.2,
+        "brightness_contrast_p": 0.5,
         "gaussian_blur_enabled": True,
         "gaussian_blur_limit": (3, 3),
         "gaussian_blur_p": 0.3,
@@ -251,7 +198,7 @@ def main():
     images_dir = Path("data_local/perso_dataset/hector_200_more_lines_extended/lines_out_sorted")
     ground_truth_path = Path("data_local/perso_dataset/hector_200_more_lines_extended/gt_hector_pages_lines.json")
     output_dir = Path("models_local/finetuned/adapters")
-    mlflow_experiment_name = "trocr-fr-finetuning"  # MLflow experiment name
+    mlflow_experiment_name = "trocr-finetuning"  # MLflow experiment name
 
     # Load env vars from project root .env (if present), without forcing users to pass secrets via CLI.
     project_root = Path(__file__).resolve().parents[2]
@@ -291,21 +238,13 @@ def main():
     split_idx = max(1, int(len(samples) * train_ratio))
     train_samples = samples[:split_idx]
     eval_samples = samples[split_idx:]
-
+    
     # ----- LOADING MODEL -----
     # loading processor, model, lora config, tokenizer
     processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
-    model = VisionEncoderDecoderModel.from_pretrained("agomberto/trocr-large-handwritten-fr")
-    tokenizer = AutoTokenizer.from_pretrained("agomberto/trocr-large-handwritten-fr")
-    
-    # Log tokenizer special tokens for debugging
-    logger.info("Tokenizer special tokens:")
-    logger.info(f"  - pad_token_id: {tokenizer.pad_token_id}")
-    logger.info(f"  - bos_token_id: {tokenizer.bos_token_id}")
-    logger.info(f"  - eos_token_id: {tokenizer.eos_token_id}")
-    logger.info(f"  - cls_token_id: {tokenizer.cls_token_id}")
-    logger.info(f"  - vocab_size: {tokenizer.vocab_size}")
-    
+    model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-large-handwritten")
+    tokenizer = AutoTokenizer.from_pretrained("microsoft/trocr-large-handwritten")  # ← AJOUTER CETTE LIGNE
+
     # LoRA configuration
     lora_config = LoraConfig(
         r=lora_r,
@@ -319,26 +258,16 @@ def main():
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
-    # Configure tokenizer padding token if needed
-    if tokenizer.pad_token_id is None:
-        if tokenizer.eos_token_id is None:
-            raise ValueError("Tokenizer must define pad or EOS token id.")
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-
-    # For RoBERTa (TrOCR decoder), use bos_token_id (NOT cls_token_id which doesn't exist)
-    decoder_start_token_id = tokenizer.bos_token_id
-    if decoder_start_token_id is None:
-        # Fallback: if no bos, use eos (NOT pad!)
-        decoder_start_token_id = tokenizer.eos_token_id
-        if decoder_start_token_id is None:
-            raise ValueError("Tokenizer must define bos_token_id or eos_token_id")
-    
-    logger.info(f"Using decoder_start_token_id: {decoder_start_token_id}")
-
-    model.config.decoder_start_token_id = decoder_start_token_id
+    # Configure model for training
+    # For the base TrOCR model, special tokens are already well-defined
+    model.config.decoder_start_token_id = tokenizer.bos_token_id
     model.config.pad_token_id = tokenizer.pad_token_id
-    # Note: vocab_size is already defined in model.config.decoder - no need to set it here
-
+    
+    logger.info(f"Tokenizer special tokens:")
+    logger.info(f"  - pad_token_id: {tokenizer.pad_token_id}")
+    logger.info(f"  - bos_token_id: {tokenizer.bos_token_id}")
+    logger.info(f"  - eos_token_id: {tokenizer.eos_token_id}")
+    logger.info(f"  - decoder_start_token_id: {model.config.decoder_start_token_id}")
 
     # ----- CREATING DATASETS -----
     # Create augmentation pipeline (only for training)
@@ -364,7 +293,7 @@ def main():
         augmentation_pipeline=None  # No augmentation for eval
     )
 
-    data_collator = TrOCRDataCollator(tokenizer)
+    data_collator = default_data_collator 
 
     report_to = ["mlflow", "tensorboard"]
 
@@ -433,5 +362,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

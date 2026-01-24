@@ -139,12 +139,14 @@ def compute_cer(processor: TrOCRProcessor):
     def _compute_cer(prediction: EvalPrediction) -> dict:
         generated_ids = prediction.predictions
         labels_ids = prediction.label_ids
-
         
         decoded_preds = processor.batch_decode(generated_ids, skip_special_tokens=True) # returning a list (batch)
         labels_ids[labels_ids == -100] = processor.tokenizer.pad_token_id
         decoded_labels = processor.batch_decode(labels_ids, skip_special_tokens=True)
 
+        print(f"[EVAL] Label: '{decoded_labels[0]}'")
+        print(f"[EVAL] Pred:  '{decoded_preds[0]}'")
+        print("-" * 20)
         cer_scores = [calculate_cer(ref, hyp) for ref, hyp in zip(decoded_labels, decoded_preds)]
         average_cer = float(np.mean(cer_scores)) if cer_scores else float("nan")
         return {"cer": average_cer}
@@ -218,7 +220,7 @@ def main():
     lora_alpha = 2*lora_r
     lora_dropout = 0.1
     target_modules = [
-        # "query", "key", "value", "dense",                   # Encodeur (ViT)
+        "query", "key", "value", "dense",                   # Encodeur (ViT)
         "q_proj", "k_proj", "v_proj", "out_proj",           # Décodeur (Attention)
         "fc1", "fc2"                                        # Couches Feed-Forward
     ]
@@ -294,8 +296,8 @@ def main():
     
     # ----- LOADING MODEL -----
     # loading processor, model, lora config, tokenizer
-    processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
-    model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
+    processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-stage1")
+    model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-stage1")
 
     # LoRA configuration
     lora_config = LoraConfig(
@@ -314,7 +316,6 @@ def main():
     # same for the pad token
     model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
     model.config.pad_token_id = processor.tokenizer.pad_token_id
-
     # setting beam search parametters used when generating text
     model.config.eos_token_id = processor.tokenizer.sep_token_id
     model.config.max_length = 64
@@ -399,15 +400,17 @@ def main():
 
         trainer.train()
 
-        # Save adapters locally first, then log them to MLflow (so the artifact path exists for inference).
-        model.save_pretrained(adapters_dir)
-        processor.feature_extractor.save_pretrained(adapters_dir)
-        processor.save_pretrained(adapters_dir)
+        save = False
+        if save == True :
+            # Save adapters locally first, then log them to MLflow (so the artifact path exists for inference).
+            model.save_pretrained(adapters_dir)
+            processor.feature_extractor.save_pretrained(adapters_dir)
+            processor.save_pretrained(adapters_dir)
 
-        if adapters_dir.exists():
-            mlflow.log_artifacts(str(adapters_dir), artifact_path="adapters")
-        if tb_dir.exists():
-            mlflow.log_artifacts(str(tb_dir), artifact_path="tensorboard")
+            if adapters_dir.exists():
+                mlflow.log_artifacts(str(adapters_dir), artifact_path="adapters")
+            if tb_dir.exists():
+                mlflow.log_artifacts(str(tb_dir), artifact_path="tensorboard")
 
         active_run = mlflow.active_run()
         if active_run is not None:

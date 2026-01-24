@@ -12,7 +12,7 @@ class TrOCRModel(OCRModel):
 
     def __init__(
         self,
-        pretrained_model_name: str = "microsoft/trocr-base-handwritten",
+        pretrained_model_name: str = "microsoft/trocr-large-handwritten",
         device: str | None = None,
         max_new_tokens: int = 256,
     ) -> None:

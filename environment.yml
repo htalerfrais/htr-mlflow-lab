@@ -25,3 +25,5 @@ dependencies:
       - onnx
       - tensorboard
       - albumentations
+      - evaluate
+      - jiwer

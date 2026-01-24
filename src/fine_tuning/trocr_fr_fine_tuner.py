@@ -25,7 +25,7 @@ from transformers import (
 import albumentations as A
 
 from peft import LoraConfig, TaskType, get_peft_model
-from src.data.local_importer import LocalLineImporter
+from src.data.local_importer import LocalLineTextImporter
 from src.utils.metrics import calculate_cer
 from dotenv import load_dotenv
 
@@ -104,12 +104,12 @@ class TrOCRDataCollator:
 
 
 
-def load_samples(images_dir: Path, ground_truth_path: Path) -> List[Tuple[str, str]]:
+def load_samples(lines_dir: Path, ground_truth_txt_path: Path, dataset_name: str = "local_dataset") -> List[Tuple[str, str]]:
     """Load the (image_path, transcription) tuples from the local dataset."""
-    importer = LocalLineImporter(
-        images_dir=str(images_dir),
-        ground_truth_path=str(ground_truth_path),
-        image_template="*line_{id:04d}.jpg",
+    importer = LocalLineTextImporter(
+        lines_dir=str(lines_dir),
+        ground_truth_txt_path=str(ground_truth_txt_path),
+        display_name=dataset_name,
     )
     samples, dataset_info = importer.import_data()
 
@@ -213,20 +213,20 @@ def main():
     # Training hyperparameters
     per_device_train_batch_size = 16
     per_device_eval_batch_size = 16
-    learning_rate = 1e-5 
+    learning_rate = 5e-6 
     num_train_epochs = 15
     weight_decay = 0.01
-    warmup_ratio = 0.2     # 10% du temps pour monter en puissance
+    warmup_ratio = 0.1
     max_target_length = 256
     logging_steps = 50
     seed = 42
     fp16 = False 
-    train_ratio = 0.9
+    train_ratio = 0.85
     
     # LoRA configuration
-    lora_r = 8
+    lora_r = 16
     lora_alpha = lora_r
-    lora_dropout = 0.1
+    lora_dropout = 0.2
     target_modules = [
         "query", "value",           # Encodeur (ViT)
         "q_proj", "v_proj"          # Décodeur
@@ -234,7 +234,7 @@ def main():
     
     # Data augmentation configuration (OCR-friendly transforms)
     augmentation_config = {
-        "enabled": False,
+        "enabled": True,
         "rotation_enabled": True,
         "rotation_limit": 2,
         "rotation_p": 0.5,
@@ -248,10 +248,11 @@ def main():
     }
     
     # ===== PATHS AND CONFIGURATION (hardcoded) =====
-    images_dir = Path("data_local/perso_dataset/hector_200_more_lines_extended/lines_out_sorted")
-    ground_truth_path = Path("data_local/perso_dataset/hector_200_more_lines_extended/gt_hector_pages_lines.json")
+    lines_dir = Path("data_local/perso_dataset/fatima_full_1100_lines/dataset_train_val/lines")
+    ground_truth_txt_path = Path("data_local/perso_dataset/fatima_full_1100_lines/dataset_train_val/gt_train_val.txt")
+    dataset_name = "fatima_full_1100_lines"
     output_dir = Path("models_local/finetuned/adapters")
-    mlflow_experiment_name = "trocr-fr-finetuning"  # MLflow experiment name
+    mlflow_experiment_name = "trocr-fr-finetuning-1100-lines"  # MLflow experiment name
 
     # Load env vars from project root .env (if present), without forcing users to pass secrets via CLI.
     project_root = Path(__file__).resolve().parents[2]
@@ -260,8 +261,8 @@ def main():
     random.seed(seed)
     torch.manual_seed(seed)
 
-    images_dir = images_dir.expanduser().resolve()
-    ground_truth_path = ground_truth_path.expanduser().resolve()
+    lines_dir = lines_dir.expanduser().resolve()
+    ground_truth_txt_path = ground_truth_txt_path.expanduser().resolve()
     output_dir = output_dir.expanduser().resolve()
     checkpoints_dir = output_dir / "checkpoints"
     adapters_dir = output_dir / "adapters"
@@ -276,17 +277,17 @@ def main():
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(mlflow_experiment_name)
 
-    if not images_dir.exists():
-        raise FileNotFoundError(f"Images directory does not exist: {images_dir}")
-    if not ground_truth_path.exists():
-        raise FileNotFoundError(f"Ground-truth file does not exist: {ground_truth_path}")
+    if not lines_dir.exists():
+        raise FileNotFoundError(f"Lines directory does not exist: {lines_dir}")
+    if not ground_truth_txt_path.exists():
+        raise FileNotFoundError(f"Ground-truth file does not exist: {ground_truth_txt_path}")
 
 
 
     # ----- IMPORTING DATA -----
 
     # loading, shuffling samples and spliting them in train & val samples
-    samples = load_samples(images_dir, ground_truth_path)
+    samples = load_samples(lines_dir, ground_truth_txt_path, dataset_name)
     random.shuffle(samples)
     split_idx = max(1, int(len(samples) * train_ratio))
     train_samples = samples[:split_idx]

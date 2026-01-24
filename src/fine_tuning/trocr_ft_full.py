@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import logging
+import random
 import torch
+from pathlib import Path
+from typing import List, Tuple
 from PIL import Image
 from torch.utils.data import Dataset
 from transformers import (
@@ -13,8 +16,8 @@ from transformers import (
     TrOCRProcessor,
     VisionEncoderDecoderModel,
 )
-from datasets import load_dataset
 import evaluate
+from src.data.local_importer import LocalLineTextImporter
 from src.utils.metrics import calculate_cer
 import numpy as np
 
@@ -22,36 +25,49 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 
-class HFTrOCRDataset(Dataset):
-    """Dataset wrapper for HuggingFace datasets (e.g., RIMES, IAM)."""
+class LocalTrOCRDataset(Dataset):
+    """Dataset wrapper for local line images with text transcriptions."""
 
     def __init__(
         self,
-        hf_dataset,
+        samples: List[Tuple[str, str]],
         processor: TrOCRProcessor,
         max_target_length: int = 256,
     ):
-        self.hf_dataset = hf_dataset
+        self.samples = samples
         self.processor = processor
         self.max_target_length = max_target_length
 
     def __len__(self) -> int:
-        return len(self.hf_dataset)
+        return len(self.samples)
 
     def __getitem__(self, idx: int) -> dict:
-        item = self.hf_dataset[idx]
+        image_path, transcription = self.samples[idx]
         
-        image = item["image"]
-        if image.mode != "RGB":
-            image = image.convert("RGB")
+        image = Image.open(image_path).convert("RGB")
         
         pixel_values = self.processor(images=image, return_tensors="pt").pixel_values.squeeze(0)
 
-        transcription = item.get("text") or item.get("ground_truth", "")
         labels = self.processor.tokenizer(transcription, padding="max_length", max_length=self.max_target_length, return_tensors="pt").input_ids.squeeze(0)
         labels = [label if label != self.processor.tokenizer.pad_token_id else -100 for label in labels]
 
         return {"pixel_values": pixel_values, "labels": torch.tensor(labels)}
+
+
+def load_samples(lines_dir: Path, ground_truth_txt_path: Path, dataset_name: str = "local_dataset") -> List[Tuple[str, str]]:
+    """Load the (image_path, transcription) tuples from the local dataset."""
+    importer = LocalLineTextImporter(
+        lines_dir=str(lines_dir),
+        ground_truth_txt_path=str(ground_truth_txt_path),
+        display_name=dataset_name,
+    )
+    samples, dataset_info = importer.import_data()
+
+    if not samples:
+        raise RuntimeError("No samples found for fine-tuning. Check dataset paths.")
+
+    logger.info("Loaded %d samples from %s", len(samples), dataset_info["dataset_root"])
+    return samples
 
 
 cer_metric = evaluate.load("cer")
@@ -90,20 +106,35 @@ def main():
     num_train_epochs = 10
     max_target_length = 150
     seed = 42
+    train_ratio = 0.85
+
+    # Dataset paths
+    lines_dir = Path("data_local/perso_dataset/fatima_full_1100_lines/dataset_train_val/lines")
+    ground_truth_txt_path = Path("data_local/perso_dataset/fatima_full_1100_lines/dataset_train_val/gt_train_val.txt")
+    dataset_name = "fatima_full_1100_lines"
 
     torch.manual_seed(seed)
+    random.seed(seed)
 
-    # Load data
-    logger.info("Loading IAM-line dataset from HuggingFace...")
-    hf_dataset = load_dataset("Teklia/RIMES-2011-line")
-    
-    N_train_samples = 5000
-    train_data = hf_dataset["train"].shuffle(seed=seed).select(range(N_train_samples))
-    val_data = hf_dataset["validation"]
+    # Load and split data
+    logger.info("Loading local dataset...")
+    lines_dir = lines_dir.expanduser().resolve()
+    ground_truth_txt_path = ground_truth_txt_path.expanduser().resolve()
 
+    if not lines_dir.exists():
+        raise FileNotFoundError(f"Lines directory does not exist: {lines_dir}")
+    if not ground_truth_txt_path.exists():
+        raise FileNotFoundError(f"Ground-truth file does not exist: {ground_truth_txt_path}")
+
+    samples = load_samples(lines_dir, ground_truth_txt_path, dataset_name)
+    random.shuffle(samples)
     
-    logger.info(f"Using {len(train_data)} train samples")
-    logger.info(f"Using {len(val_data)} validation samples")
+    split_idx = max(1, int(len(samples) * train_ratio))
+    train_samples = samples[:split_idx]
+    val_samples = samples[split_idx:]
+    
+    logger.info(f"Using {len(train_samples)} train samples")
+    logger.info(f"Using {len(val_samples)} validation samples")
     
     # Load model
     logger.info("Loading TrOCR model...")
@@ -114,7 +145,7 @@ def main():
     model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
     model.config.pad_token_id = processor.tokenizer.pad_token_id
     model.config.vocab_size = model.config.decoder.vocab_size
-
+    
     # Configure generation using GenerationConfig
     generation_config = GenerationConfig(
         max_length=max_target_length,
@@ -129,13 +160,13 @@ def main():
     model.generation_config = generation_config
 
     # Create datasets
-    train_dataset = HFTrOCRDataset(
-        train_data,
+    train_dataset = LocalTrOCRDataset(
+        train_samples,
         processor, 
         max_target_length=max_target_length,
     )
-    eval_dataset = HFTrOCRDataset(
-        val_data,
+    eval_dataset = LocalTrOCRDataset(
+        val_samples,
         processor, 
         max_target_length=max_target_length,
     )

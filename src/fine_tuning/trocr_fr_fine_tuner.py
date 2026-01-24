@@ -213,7 +213,7 @@ def main():
     # Training hyperparameters
     per_device_train_batch_size = 16
     per_device_eval_batch_size = 16
-    learning_rate = 5e-6 
+    learning_rate = 1e-6 
     num_train_epochs = 15
     weight_decay = 0.01
     warmup_ratio = 0.1
@@ -223,13 +223,13 @@ def main():
     fp16 = False 
     train_ratio = 0.85
     
+    
     # LoRA configuration
     lora_r = 16
     lora_alpha = lora_r
     lora_dropout = 0.2
     target_modules = [
-        "query", "value",           # Encodeur (ViT)
-        "q_proj", "v_proj"          # Décodeur
+        "q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"          # Décodeur
     ]
     
     # Data augmentation configuration (OCR-friendly transforms)

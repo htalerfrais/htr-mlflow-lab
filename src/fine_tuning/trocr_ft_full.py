@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import random
 import torch
 from pathlib import Path
@@ -17,6 +18,8 @@ from transformers import (
     VisionEncoderDecoderModel,
 )
 import evaluate
+import mlflow
+from dotenv import load_dotenv
 from src.data.local_importer import LocalLineTextImporter
 from src.utils.metrics import calculate_cer
 import numpy as np
@@ -112,15 +115,35 @@ def main():
     lines_dir = Path("data_local/perso_dataset/fatima_full_1100_lines/dataset_train_val/lines")
     ground_truth_txt_path = Path("data_local/perso_dataset/fatima_full_1100_lines/dataset_train_val/gt_train_val.txt")
     dataset_name = "fatima_full_1100_lines"
+    
+    # Output paths
+    output_dir = Path("models_local/full_finetuned")
+    mlflow_experiment_name = "full-fine-tune"
+
+    # Load env vars from project root .env
+    project_root = Path(__file__).resolve().parents[2]
+    load_dotenv(project_root / ".env")
 
     torch.manual_seed(seed)
     random.seed(seed)
 
-    # Load and split data
-    logger.info("Loading local dataset...")
+    # Resolve paths
     lines_dir = lines_dir.expanduser().resolve()
     ground_truth_txt_path = ground_truth_txt_path.expanduser().resolve()
+    output_dir = output_dir.expanduser().resolve()
+    checkpoints_dir = output_dir / "checkpoints"
+    tb_dir = output_dir / "tb"
 
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+    tb_dir.mkdir(parents=True, exist_ok=True)
+
+    # Configure MLflow
+    mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+    mlflow.set_tracking_uri(mlflow_tracking_uri)
+    mlflow.set_experiment(mlflow_experiment_name)
+
+    # Load and split data
+    logger.info("Loading local dataset...")
     if not lines_dir.exists():
         raise FileNotFoundError(f"Lines directory does not exist: {lines_dir}")
     if not ground_truth_txt_path.exists():
@@ -139,7 +162,7 @@ def main():
     # Load model
     logger.info("Loading TrOCR model...")
     processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
-    model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-stage1")
+    model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
 
     # Configure tokens
     model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
@@ -173,7 +196,7 @@ def main():
     
     # Training arguments (using defaults for most parameters)
     training_args = Seq2SeqTrainingArguments(
-        output_dir="./output",
+        output_dir=str(checkpoints_dir),
         per_device_train_batch_size=per_device_train_batch_size,
         per_device_eval_batch_size=per_device_eval_batch_size,
         learning_rate=learning_rate,
@@ -181,26 +204,60 @@ def main():
         predict_with_generate=True,
         logging_strategy="steps",
         logging_steps=50,
+        logging_dir=str(tb_dir),
         eval_strategy="epoch",
+        save_strategy="epoch",
+        report_to=["mlflow", "tensorboard"],
+        save_total_limit=3,
     )
     
-    trainer = Seq2SeqTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        data_collator=default_data_collator,
-        tokenizer=processor,
-        compute_metrics=lambda pred: compute_metrics(processor, pred),
-    )
+    with mlflow.start_run():
+        # Log hyperparameters
+        mlflow.log_params({
+            "per_device_train_batch_size": per_device_train_batch_size,
+            "per_device_eval_batch_size": per_device_eval_batch_size,
+            "learning_rate": learning_rate,
+            "num_train_epochs": num_train_epochs,
+            "max_target_length": max_target_length,
+            "train_ratio": train_ratio,
+            "dataset_name": dataset_name,
+            "num_train_samples": len(train_samples),
+            "num_val_samples": len(val_samples),
+        })
+        
+        trainer = Seq2SeqTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            data_collator=default_data_collator,
+            tokenizer=processor,
+            compute_metrics=lambda pred: compute_metrics(processor, pred),
+        )
 
-    logger.info("Evaluating model before training...")
-    initial_metrics = trainer.evaluate()
-    logger.info(f"Initial CER: {initial_metrics['eval_cer']:.4f}")
-    
-    logger.info("Starting training...")
-    trainer.train()
-    logger.info("Training completed!")
+        logger.info("Evaluating model before training...")
+        initial_metrics = trainer.evaluate()
+        logger.info(f"Initial CER: {initial_metrics['eval_cer']:.4f}")
+        
+        logger.info("Starting training...")
+        trainer.train()
+        logger.info("Training completed!")
+        
+        # Save model and processor
+        final_model_dir = output_dir / "final_model"
+        final_model_dir.mkdir(parents=True, exist_ok=True)
+        model.save_pretrained(final_model_dir)
+        processor.save_pretrained(final_model_dir)
+        
+        # Log artifacts to MLflow
+        if final_model_dir.exists():
+            mlflow.log_artifacts(str(final_model_dir), artifact_path="model")
+        if tb_dir.exists():
+            mlflow.log_artifacts(str(tb_dir), artifact_path="tensorboard")
+        
+        active_run = mlflow.active_run()
+        if active_run is not None:
+            logger.info("MLflow run_id: %s", active_run.info.run_id)
 
 
 if __name__ == "__main__":

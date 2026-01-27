@@ -211,9 +211,9 @@ def create_augmentation_pipeline(config: dict):
 def main():
     # ===== HYPERPARAMETERS (hardcoded) =====
     # Training hyperparameters
-    per_device_train_batch_size = 16
-    per_device_eval_batch_size = 16
-    learning_rate = 1e-6 
+    per_device_train_batch_size = 8
+    per_device_eval_batch_size = 8
+    learning_rate = 2e-6 
     num_train_epochs = 15
     weight_decay = 0.01
     warmup_ratio = 0.1

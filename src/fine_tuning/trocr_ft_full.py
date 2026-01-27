@@ -106,7 +106,7 @@ def main():
     per_device_train_batch_size = 16
     per_device_eval_batch_size = 16
     learning_rate = 5e-6
-    num_train_epochs = 10
+    num_train_epochs = 20
     max_target_length = 150
     seed = 42
     train_ratio = 0.85
@@ -161,9 +161,10 @@ def main():
     
     # Load model
     logger.info("Loading TrOCR model...")
-    processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
-    model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
-
+    base_model_name = "microsoft/trocr-base-handwritten"
+    processor = TrOCRProcessor.from_pretrained(base_model_name)
+    model = VisionEncoderDecoderModel.from_pretrained(base_model_name)
+    
     # Configure tokens
     model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
     model.config.pad_token_id = processor.tokenizer.pad_token_id
@@ -214,6 +215,7 @@ def main():
     with mlflow.start_run():
         # Log hyperparameters
         mlflow.log_params({
+            "base_model": base_model_name,
             "per_device_train_batch_size": per_device_train_batch_size,
             "per_device_eval_batch_size": per_device_eval_batch_size,
             "learning_rate": learning_rate,

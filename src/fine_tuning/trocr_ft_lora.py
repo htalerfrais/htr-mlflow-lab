@@ -295,9 +295,10 @@ def main():
 
     # ----- LOADING MODEL -----
     # loading processor, model, lora config, tokenizer
-    processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
-    model = VisionEncoderDecoderModel.from_pretrained("agomberto/trocr-large-handwritten-fr")
-    tokenizer = AutoTokenizer.from_pretrained("agomberto/trocr-large-handwritten-fr")
+    base_model_name = "microsoft/trocr-base-handwritten"
+    processor = TrOCRProcessor.from_pretrained(base_model_name)
+    model = VisionEncoderDecoderModel.from_pretrained(base_model_name)
+    tokenizer = AutoTokenizer.from_pretrained(base_model_name)
     
     # Log tokenizer special tokens for debugging
     logger.info("Tokenizer special tokens:")
@@ -401,6 +402,9 @@ def main():
         # Log data augmentation configuration to MLflow
         aug_params = {f"aug_{k}": v for k, v in augmentation_config.items()}
         mlflow.log_params(aug_params)
+        
+        # Log base model
+        mlflow.log_param("base_model", base_model_name)
         
         trainer = Seq2SeqTrainer(
             model=model,

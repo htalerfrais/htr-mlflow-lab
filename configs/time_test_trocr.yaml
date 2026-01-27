@@ -1,5 +1,5 @@
 experiment_name: "Model Performance Time Tests"
-run_name: "CRNN on Fatima dataset"
+run_name: "TrOCR on Fatima dataset"
 pipeline: "line_to_text"
 dataset: 
   name: "local_lines_text"
@@ -7,12 +7,8 @@ dataset:
   ground_truth_txt_path: "data_local/perso_dataset/fatima_full_1100_lines/dataset_train_val/gt_train_val.txt"
   display_name: "fatima_1100_lines"
 model:
-  name: "crnn_f"
-  model_path: "models_local/best_model_metrics.pt"
-  img_height: 128
-  n_channels: 1
-  device: "cuda"
+  name: "trocr"
+  pretrained_model_name: "microsoft/trocr-large-handwritten"
+  max_new_tokens: 256
 preprocessor: 
   - "identity"
-
-

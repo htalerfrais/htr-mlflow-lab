@@ -14,5 +14,3 @@ model:
   device: "cuda"
 preprocessor: 
   - "identity"
-
-

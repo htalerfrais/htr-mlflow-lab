@@ -3,9 +3,8 @@ from __future__ import annotations
 from typing import Dict, Type
 
 from src.data.base import DataImporter
-from src.data.line_importer import IAMLineImporter
-from src.data.local_importer import LocalLineImporter
-from src.data.rimes_importer import RIMESLineImporter
+from src.data.line_importer import IAMLineImporter, RIMESLineImporter
+from src.data.local_importer import LocalLineImporter, LocalLineTextImporter
 
 
 class DataImporterFactory:
@@ -13,8 +12,9 @@ class DataImporterFactory:
 
     _registry: Dict[str, Type[DataImporter]] = {
         "teklia/iam-line": IAMLineImporter,
-        "teklia/rimes-line": RIMESLineImporter,
+        "teklia/rimes-2011-line": RIMESLineImporter,
         "local_lines": LocalLineImporter,
+        "local_lines_text": LocalLineTextImporter,
     }
 
     @classmethod

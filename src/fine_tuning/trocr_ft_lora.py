@@ -22,9 +22,10 @@ from transformers import (
     TrOCRProcessor,
     VisionEncoderDecoderModel,
 )
+import albumentations as A
 
 from peft import LoraConfig, TaskType, get_peft_model
-from src.data.local_importer import LocalLineImporter
+from src.data.local_importer import LocalLineTextImporter
 from src.utils.metrics import calculate_cer
 from dotenv import load_dotenv
 
@@ -42,11 +43,13 @@ class TrOCRLineDataset(Dataset):
         processor: TrOCRProcessor,
         tokenizer: AutoTokenizer,
         max_target_length: int = 256,
+        augmentation_pipeline=None,
     ):
         self.samples = samples
         self.processor = processor
         self.tokenizer = tokenizer
         self.max_target_length = max_target_length
+        self.augmentation_pipeline = augmentation_pipeline
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -54,6 +57,14 @@ class TrOCRLineDataset(Dataset):
     def __getitem__(self, idx: int) -> dict:
         image_path, transcription = self.samples[idx]
         image = Image.open(image_path).convert("RGB")
+        
+        # Apply data augmentation if configured
+        if self.augmentation_pipeline is not None:
+            # Albumentations expects numpy array
+            image_np = np.array(image)
+            augmented = self.augmentation_pipeline(image=image_np)
+            image = Image.fromarray(augmented["image"])
+        
         pixel_values = self.processor(images=image, return_tensors="pt").pixel_values.squeeze(0) #squeeze(0) removes the first dimension of the tensor (batch dimension)
 
         tokenized = self.tokenizer(
@@ -93,12 +104,12 @@ class TrOCRDataCollator:
 
 
 
-def load_samples(images_dir: Path, ground_truth_path: Path) -> List[Tuple[str, str]]:
+def load_samples(lines_dir: Path, ground_truth_txt_path: Path, dataset_name: str = "local_dataset") -> List[Tuple[str, str]]:
     """Load the (image_path, transcription) tuples from the local dataset."""
-    importer = LocalLineImporter(
-        images_dir=str(images_dir),
-        ground_truth_path=str(ground_truth_path),
-        image_template="*line_{id:04d}.jpg",
+    importer = LocalLineTextImporter(
+        lines_dir=str(lines_dir),
+        ground_truth_txt_path=str(ground_truth_txt_path),
+        display_name=dataset_name,
     )
     samples, dataset_info = importer.import_data()
 
@@ -123,6 +134,15 @@ def compute_cer_metrics(tokenizer: AutoTokenizer):
         labels = np.where(labels == -100, tokenizer.pad_token_id, labels)
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
+        # --- AJOUT : AFFICHAGE DANS LA CONSOLE ---
+        print(f"\n--- EXEMPLES DE PRÉDICTIONS (Total: {len(decoded_preds)}) ---")
+        for i in range(min(5, len(decoded_preds))): # On en affiche 5
+            print(f"REF: {decoded_labels[i]}")
+            print(f"PRED: {decoded_preds[i]}")
+            print("-" * 20)
+        # ------------------------------------------
+
+
         cer_scores = [
             calculate_cer(ref, hyp) for ref, hyp in zip(decoded_labels, decoded_preds)  
         ]
@@ -132,39 +152,107 @@ def compute_cer_metrics(tokenizer: AutoTokenizer):
     return _compute
 
 
+def create_augmentation_pipeline(config: dict):
+    """
+    Create an Albumentations pipeline for OCR-friendly data augmentation.
+    
+    Args:
+        config: Dictionary with augmentation settings. Must include 'enabled' key.
+                Returns None if config['enabled'] is False.
+    
+    Returns:
+        A.Compose object or None if augmentation is disabled.
+    """
+    if not config.get("enabled", False):
+        return None
+    
+    transforms = []
+    
+    # Rotation (very light for OCR)
+    if config.get("rotation_enabled", False):
+        transforms.append(A.Rotate(
+            limit=config.get("rotation_limit", 2),
+            p=config.get("rotation_p", 0.5),
+            border_mode=0,  # constant border with zeros
+        ))
+    
+    # Gaussian Blur
+    if config.get("gaussian_blur_enabled", False):
+        transforms.append(A.GaussianBlur(
+            blur_limit=config.get("gaussian_blur_limit", (3, 3)),
+            p=config.get("gaussian_blur_p", 0.3),
+        ))
+    
+    # Gaussian Noise
+    if config.get("gaussian_noise_enabled", False):
+        transforms.append(A.GaussNoise(
+            std_range=config.get("gaussian_noise_std_range", (0.01, 0.05)),  # Normalisé entre 0 et 1
+            mean_range=config.get("gaussian_noise_mean_range", (0.0, 0.0)),
+            p=config.get("gaussian_noise_p", 0.3),
+        ))
+    
+    # Affine transform (replaces deprecated ShiftScaleRotate)
+    transforms.append(A.Affine(
+        translate_percent={"x": (-0.05, 0.05), "y": (-0.05, 0.05)},  # shift_limit
+        scale=(0.95, 1.05),  # scale_limit (1.0 ± 0.05)
+        rotate=(-2, 2),  # rotate_limit
+        p=0.5,
+        border_mode=0,  # 0 = constant
+    ))
+    
+    if not transforms:
+        logger.warning("Data augmentation enabled but no transforms are configured.")
+        return None
+    
+    return A.Compose(transforms)
 
 
 
 def main():
     # ===== HYPERPARAMETERS (hardcoded) =====
     # Training hyperparameters
-    per_device_train_batch_size = 16
-    per_device_eval_batch_size = 16
-    learning_rate = 1e-5 
-    num_train_epochs = 30
+    per_device_train_batch_size = 8
+    per_device_eval_batch_size = 8
+    learning_rate = 2e-6 
+    num_train_epochs = 15
     weight_decay = 0.01
-    warmup_ratio = 0.1     # 10% du temps pour monter en puissance
+    warmup_ratio = 0.1
     max_target_length = 256
     logging_steps = 50
     seed = 42
     fp16 = False 
-    train_ratio = 0.9
+    train_ratio = 0.85
+    
     
     # LoRA configuration
     lora_r = 16
-    lora_alpha = 2*lora_r
-    lora_dropout = 0.1
+    lora_alpha = lora_r
+    lora_dropout = 0.2
     target_modules = [
-        "query", "key", "value", "dense",                   # Encodeur (ViT)
-        "q_proj", "k_proj", "v_proj", "out_proj",           # Décodeur (Attention)
-        "fc1", "fc2"                                        # Couches Feed-Forward
+        "q_proj", "k_proj", "v_proj", "out_proj", "fc1", "fc2"          # Décodeur
     ]
     
+    # Data augmentation configuration (OCR-friendly transforms)
+    augmentation_config = {
+        "enabled": True,
+        "rotation_enabled": True,
+        "rotation_limit": 2,
+        "rotation_p": 0.5,
+        "gaussian_blur_enabled": True,
+        "gaussian_blur_limit": (3, 3),
+        "gaussian_blur_p": 0.3,
+        "gaussian_noise_enabled": True,
+        "gaussian_noise_std_range": (0.01, 0.05),  # Normalisé entre 0 et 1 (1% à 5% de l'intensité max)
+        "gaussian_noise_mean_range": (0.0, 0.0),  # centre du bruit
+        "gaussian_noise_p": 0.3,
+    }
+    
     # ===== PATHS AND CONFIGURATION (hardcoded) =====
-    images_dir = Path("data_local/perso_dataset/hector_200_more_lines_extended/lines_out_sorted")
-    ground_truth_path = Path("data_local/perso_dataset/hector_200_more_lines_extended/gt_hector_pages_lines.json")
+    lines_dir = Path("data_local/perso_dataset/fatima_full_1100_lines/dataset_train_val/lines")
+    ground_truth_txt_path = Path("data_local/perso_dataset/fatima_full_1100_lines/dataset_train_val/gt_train_val.txt")
+    dataset_name = "fatima_full_1100_lines"
     output_dir = Path("models_local/finetuned/adapters")
-    mlflow_experiment_name = "trocr-fr-finetuning"  # MLflow experiment name
+    mlflow_experiment_name = "trocr-fr-finetuning-1100-lines"  # MLflow experiment name
 
     # Load env vars from project root .env (if present), without forcing users to pass secrets via CLI.
     project_root = Path(__file__).resolve().parents[2]
@@ -173,8 +261,8 @@ def main():
     random.seed(seed)
     torch.manual_seed(seed)
 
-    images_dir = images_dir.expanduser().resolve()
-    ground_truth_path = ground_truth_path.expanduser().resolve()
+    lines_dir = lines_dir.expanduser().resolve()
+    ground_truth_txt_path = ground_truth_txt_path.expanduser().resolve()
     output_dir = output_dir.expanduser().resolve()
     checkpoints_dir = output_dir / "checkpoints"
     adapters_dir = output_dir / "adapters"
@@ -189,17 +277,17 @@ def main():
     mlflow.set_tracking_uri(mlflow_tracking_uri)
     mlflow.set_experiment(mlflow_experiment_name)
 
-    if not images_dir.exists():
-        raise FileNotFoundError(f"Images directory does not exist: {images_dir}")
-    if not ground_truth_path.exists():
-        raise FileNotFoundError(f"Ground-truth file does not exist: {ground_truth_path}")
+    if not lines_dir.exists():
+        raise FileNotFoundError(f"Lines directory does not exist: {lines_dir}")
+    if not ground_truth_txt_path.exists():
+        raise FileNotFoundError(f"Ground-truth file does not exist: {ground_truth_txt_path}")
 
 
 
     # ----- IMPORTING DATA -----
 
     # loading, shuffling samples and spliting them in train & val samples
-    samples = load_samples(images_dir, ground_truth_path)
+    samples = load_samples(lines_dir, ground_truth_txt_path, dataset_name)
     random.shuffle(samples)
     split_idx = max(1, int(len(samples) * train_ratio))
     train_samples = samples[:split_idx]
@@ -207,8 +295,18 @@ def main():
 
     # ----- LOADING MODEL -----
     # loading processor, model, lora config, tokenizer
-    processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
-    model = VisionEncoderDecoderModel.from_pretrained("agomberto/trocr-large-handwritten-fr")
+    base_model_name = "microsoft/trocr-base-handwritten"
+    processor = TrOCRProcessor.from_pretrained(base_model_name)
+    model = VisionEncoderDecoderModel.from_pretrained(base_model_name)
+    tokenizer = AutoTokenizer.from_pretrained(base_model_name)
+    
+    # Log tokenizer special tokens for debugging
+    logger.info("Tokenizer special tokens:")
+    logger.info(f"  - pad_token_id: {tokenizer.pad_token_id}")
+    logger.info(f"  - bos_token_id: {tokenizer.bos_token_id}")
+    logger.info(f"  - eos_token_id: {tokenizer.eos_token_id}")
+    logger.info(f"  - cls_token_id: {tokenizer.cls_token_id}")
+    logger.info(f"  - vocab_size: {tokenizer.vocab_size}")
     
     # LoRA configuration
     lora_config = LoraConfig(
@@ -222,26 +320,51 @@ def main():
     
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
-    tokenizer = AutoTokenizer.from_pretrained("agomberto/trocr-large-handwritten-fr")
 
+    # Configure tokenizer padding token if needed
     if tokenizer.pad_token_id is None:
         if tokenizer.eos_token_id is None:
             raise ValueError("Tokenizer must define pad or EOS token id.")
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
-    decoder_start_token_id = tokenizer.cls_token_id or tokenizer.bos_token_id
+    # For RoBERTa (TrOCR decoder), use bos_token_id (NOT cls_token_id which doesn't exist)
+    decoder_start_token_id = tokenizer.bos_token_id
     if decoder_start_token_id is None:
-        decoder_start_token_id = tokenizer.pad_token_id
+        # Fallback: if no bos, use eos (NOT pad!)
+        decoder_start_token_id = tokenizer.eos_token_id
+        if decoder_start_token_id is None:
+            raise ValueError("Tokenizer must define bos_token_id or eos_token_id")
+    
+    logger.info(f"Using decoder_start_token_id: {decoder_start_token_id}")
 
     model.config.decoder_start_token_id = decoder_start_token_id
     model.config.pad_token_id = tokenizer.pad_token_id
-    model.config.vocab_size = tokenizer.vocab_size
+    # Note: vocab_size is already defined in model.config.decoder - no need to set it here
 
 
     # ----- CREATING DATASETS -----
+    # Create augmentation pipeline (only for training)
+    augmentation_pipeline = create_augmentation_pipeline(augmentation_config)
+    if augmentation_pipeline:
+        logger.info("Data augmentation enabled for training")
+    else:
+        logger.info("Data augmentation disabled")
+    
     # on vient créer des datasets ingérables par le modèle respecrant le format Hugging Face
-    train_dataset = TrOCRLineDataset(train_samples, processor, tokenizer, max_target_length=max_target_length)
-    eval_dataset = TrOCRLineDataset(eval_samples, processor, tokenizer, max_target_length=max_target_length)
+    train_dataset = TrOCRLineDataset(
+        train_samples, 
+        processor, 
+        tokenizer, 
+        max_target_length=max_target_length,
+        augmentation_pipeline=augmentation_pipeline  # Apply augmentation only to train
+    )
+    eval_dataset = TrOCRLineDataset(
+        eval_samples, 
+        processor, 
+        tokenizer, 
+        max_target_length=max_target_length,
+        augmentation_pipeline=None  # No augmentation for eval
+    )
 
     data_collator = TrOCRDataCollator(tokenizer)
 
@@ -276,6 +399,13 @@ def main():
     )
 
     with mlflow.start_run():
+        # Log data augmentation configuration to MLflow
+        aug_params = {f"aug_{k}": v for k, v in augmentation_config.items()}
+        mlflow.log_params(aug_params)
+        
+        # Log base model
+        mlflow.log_param("base_model", base_model_name)
+        
         trainer = Seq2SeqTrainer(
             model=model,
             args=training_args,

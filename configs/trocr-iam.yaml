@@ -10,5 +10,4 @@ preprocessor:
 
 model:
   name: "trocr"
-  pretrained_model_name: "microsoft/trocr-base-handwritten"
   max_new_tokens: 256

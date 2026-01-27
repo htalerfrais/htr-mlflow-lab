@@ -1,0 +1,14 @@
+experiment_name: "Qwen tests"
+run_name: "qwen2.5-vl-7b on RIMES"
+pipeline: "line_to_text"
+dataset: 
+  name: "teklia/RIMES-2011-line"
+model:
+  name: "qwen_vl"
+  pretrained_model_name: "Qwen/Qwen2.5-VL-7B-Instruct"
+  device_map: "auto"
+  torch_dtype: "auto"
+  max_new_tokens: 256
+  prompt: "Read and transcribe all text in the image exactly. Output only the transcription."
+preprocessor: 
+  - "identity"
